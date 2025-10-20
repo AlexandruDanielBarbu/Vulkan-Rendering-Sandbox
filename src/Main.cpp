@@ -94,10 +94,12 @@ int main(int argc, char** argv) {
     // Subtask 1.1: Load Settings From File
     /* --------------------------------------------- */
 
-    int window_width = 800;
-    int window_height = 800;
+    INIReader window_reader("assets/settings/window.ini");
+    int window_width = window_reader.GetInteger("window", "width", 800);
+    int window_height = window_reader.GetInteger("window", "height", 800);
     bool fullscreen = false;
-    std::string window_title = "Task 0";
+    std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
+
     // Install a callback function, which gets invoked whenever a GLFW error occurred.
     glfwSetErrorCallback(errorCallbackFromGlfw);
 
