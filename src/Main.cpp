@@ -155,11 +155,28 @@ int main(int argc, char** argv) {
     instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO; // Set the struct's type
     instance_create_info.pApplicationInfo = &application_info;
 
-    // TODO: Hook in required_extensions using VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames!
-    // TODO: Hook in enabled_layers using VkInstanceCreateInfo::enabledLayerCount and VkInstanceCreateInfo::ppEnabledLayerNames!
+    // Hook in required_extensions using VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames!
+    // This line promises to both set up VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames
+    instance_create_info.ppEnabledExtensionNames = glfwGetRequiredInstanceExtensions(&instance_create_info.enabledExtensionCount);
+    if (instance_create_info.ppEnabledExtensionNames == NULL) {
+        VKL_EXIT_WITH_ERROR("No GLFW extensions supported to display things around.");
+    }
+    // Note: A loop through all existing extensions to check whether or not required extension exists or not is advised
+    
+    // Hook in enabled_layers using VkInstanceCreateInfo::enabledLayerCount and VkInstanceCreateInfo::ppEnabledLayerNames!
+    instance_create_info.enabledLayerCount = 1;
+    const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
+    instance_create_info.ppEnabledLayerNames = layers;
+    // same observation with the loop is advised here also, to be done later
+
     // TODO: Use vkCreateInstance to create a vulkan instance handle! Assign it to vk_instance!
+    VkResult rez = vkCreateInstance(&instance_create_info, NULL, &vk_instance);
+    
     if (!vk_instance) {
         VKL_EXIT_WITH_ERROR("No VkInstance created or handle not assigned.");
+    }
+    if (rez != VK_SUCCESS) {
+        VKL_EXIT_WITH_ERROR("Function vkCreateInstance failed.");
     }
     VKL_LOG("Subtask 1.3 done.");
 
