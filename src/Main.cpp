@@ -110,6 +110,7 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("Failed to init GLFW");
     }
 
+    // below line deactivates some OpenGl/OpenGl SE stuff
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // No need to create a graphics context for Vulkan
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
@@ -119,8 +120,9 @@ int main(int argc, char** argv) {
         monitor = glfwGetPrimaryMonitor();
     }
 
-    // TODO: Get a valid window handle and assign to window:
-    GLFWwindow* window = nullptr;
+    // Get a valid window handle and assign to window
+    // Note that i used the above mentioned variable called monitor.
+    GLFWwindow* window = glfwCreateWindow(window_width, window_height, window_title.c_str(), monitor, NULL);
 
     if (!window) {
         VKL_LOG("If your program reaches this point, that means two things:");
