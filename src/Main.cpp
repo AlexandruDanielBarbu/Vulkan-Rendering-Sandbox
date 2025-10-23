@@ -151,31 +151,78 @@ int main(int argc, char** argv) {
     application_info.applicationVersion = VK_MAKE_API_VERSION(0, 2023, 9, 19);
     application_info.apiVersion = VK_API_VERSION_1_1;            // Your system needs to support this Vulkan API version.
 
+
+
     VkInstanceCreateInfo instance_create_info = {};                      // Zero-initialize every member
     instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO; // Set the struct's type
     instance_create_info.pApplicationInfo = &application_info;
 
-    // Hook in required_extensions using VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames!
-    // This line promises to both set up VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames
-    instance_create_info.ppEnabledExtensionNames = glfwGetRequiredInstanceExtensions(&instance_create_info.enabledExtensionCount);
-    if (instance_create_info.ppEnabledExtensionNames == NULL) {
+    // Get required glfw extensions
+    uint32_t glfwExtensionCount = 0;
+    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    if (glfwExtensions == NULL) {
         VKL_EXIT_WITH_ERROR("No GLFW extensions supported to display things around.");
     }
-    // Note: A loop through all existing extensions to check whether or not required extension exists or not is advised
+
+    // Get all supported extensions
+    uint32_t extensionCount = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
     
+    std::vector<VkExtensionProperties> extensions(extensionCount);
+    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+
+    // Query if i support all extensions
+    for (int i = 0; i < glfwExtensionCount; i++) {
+        bool isFound = false;
+        for (const auto& extension : extensions) {
+            if (strcmp(glfwExtensions[i], extension.extensionName) == 0) {
+                isFound = true;
+                break;
+            }
+        }
+
+        if (!isFound)
+            VKL_EXIT_WITH_ERROR("One extension was not found.");
+    }
+
+    // Hook in required_extensions using VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames!
+    instance_create_info.enabledExtensionCount = glfwExtensionCount;
+    instance_create_info.ppEnabledExtensionNames = glfwExtensions;
+
     // Hook in enabled_layers using VkInstanceCreateInfo::enabledLayerCount and VkInstanceCreateInfo::ppEnabledLayerNames!
     instance_create_info.enabledLayerCount = 1;
     const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
     instance_create_info.ppEnabledLayerNames = layers;
-    // same observation with the loop is advised here also, to be done later
+    
+    // Get supported Layer count
+    uint32_t layerCount = 0;
+    vkEnumerateInstanceLayerProperties(&layerCount, NULL);
+    // Get the layer names
+    std::vector<VkLayerProperties> availableLayers(layerCount);
+    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
-    // TODO: Use vkCreateInstance to create a vulkan instance handle! Assign it to vk_instance!
-    VkResult rez = vkCreateInstance(&instance_create_info, NULL, &vk_instance);
+    // Query if i support all layers
+    for (int i = 0; i < instance_create_info.enabledLayerCount; i++) {
+        bool isFound = false;
+        for (const auto& layer : availableLayers) {
+            if (strcmp(instance_create_info.ppEnabledLayerNames[i], layer.layerName) == 0) {
+                isFound = true;
+                break;
+            }
+        }
+
+        if (!isFound)
+            VKL_EXIT_WITH_ERROR("One layer was not found.");
+    }
+    
+    // Use vkCreateInstance to create a vulkan instance handle! Assign it to vk_instance!
+    VkResult errCreateInstance = vkCreateInstance(&instance_create_info, NULL, &vk_instance);
     
     if (!vk_instance) {
         VKL_EXIT_WITH_ERROR("No VkInstance created or handle not assigned.");
     }
-    if (rez != VK_SUCCESS) {
+    if (errCreateInstance != VK_SUCCESS) {
         VKL_EXIT_WITH_ERROR("Function vkCreateInstance failed.");
     }
     VKL_LOG("Subtask 1.3 done.");
@@ -183,17 +230,51 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 1.4: Create a Vulkan Window Surface
     /* --------------------------------------------- */
-    // TODO: Use glfwCreateWindowSurface to create a window surface! Assign its handle to vk_surface!
+    // Use glfwCreateWindowSurface to create a window surface! Assign its handle to vk_surface!
+    
+    VkResult errSurface = glfwCreateWindowSurface(vk_instance, window, NULL, &vk_surface);
+
     if (!vk_surface) {
         VKL_EXIT_WITH_ERROR("No VkSurfaceKHR created or handle not assigned.");
+    }
+    if (errSurface != VK_SUCCESS)
+    {
+        VKL_EXIT_WITH_ERROR("Function glfwCreateWindowSurface failed.");
     }
     VKL_LOG("Subtask 1.4 done.");
 
     /* --------------------------------------------- */
     // Subtask 1.5: Pick a Physical Device
     /* --------------------------------------------- */
-    // TODO: Use vkEnumeratePhysicalDevices get all the available physical device handles!
-    //       Select one that is suitable using the helper function selectPhysicalDeviceIndex and assign it to vk_physical_device!
+    // Use vkEnumeratePhysicalDevices get all the available physical device handles!
+    // Select one that is suitable using the helper function selectPhysicalDeviceIndex and assign it to vk_physical_device!
+
+    // Get number of devices
+    uint32_t physicalDeviceCount = 0;
+    vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, NULL);
+    // Get devices in an array
+    std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
+    vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, physicalDevices.data());
+
+    // Print all devices' name and type
+    for (const auto& device : physicalDevices) {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(device, &properties);
+        VKL_LOG(std::string(properties.deviceName + properties.deviceType));
+
+    }
+
+    // let the framework decide the device
+    uint32_t device_index = selectPhysicalDeviceIndex(physicalDevices, vk_surface);
+
+    vk_physical_device = physicalDevices[device_index];
+    // Just print what GPU got selected
+    {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(vk_physical_device, &properties);
+        VKL_LOG(std::string(properties.deviceName));
+    }
+
     if (!vk_physical_device) {
         VKL_EXIT_WITH_ERROR("No VkPhysicalDevice selected or handle not assigned.");
     }
@@ -202,9 +283,9 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 1.6: Select a Queue Family
     /* --------------------------------------------- */
-    // TODO: Find a suitable queue family and assign its index to the following variable:
-    //       Hint: Use the function selectQueueFamilyIndex, but complete its implementation first!
-    uint32_t selected_queue_family_index = std::numeric_limits<uint32_t>::max();
+    // Find a suitable queue family and assign its index to the following variable:
+    //      Hint: Use the function selectQueueFamilyIndex, but complete its implementation first!
+    uint32_t selected_queue_family_index = selectQueueFamilyIndex(vk_physical_device, vk_surface);
 
     // Sanity check if we have selected a valid queue family index:
     uint32_t queue_family_count = 0;
@@ -217,12 +298,19 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 1.7: Create a Logical Device and Get Queue
     /* --------------------------------------------- */
-    // TODOs: - Create an instance of VkDeviceCreateInfo and use it to create one queue!
-    //        - Hook in the address of the VkDeviceQueueCreateInfo instance at the right place!
-    //        - Use VkDeviceCreateInfo::enabledExtensionCount and VkDeviceCreateInfo::ppEnabledExtensionNames
-    //          to enable the VK_KHR_SWAPCHAIN_EXTENSION_NAME device extension!
-    //        - Ensure that the other settings (which are unused in our case) are zero-initialized!
-    //        - Finally, use vkCreateDevice to create the device and assign its handle to vk_device!
+    // TODOs: [x] Create an instance of VkDeviceCreateInfo and use it to create one queue!
+    //        [x] Hook in the address of the VkDeviceQueueCreateInfo instance at the right place!
+    //        [ ] Use VkDeviceCreateInfo::enabledExtensionCount and VkDeviceCreateInfo::ppEnabledExtensionNames
+    //            to enable the VK_KHR_SWAPCHAIN_EXTENSION_NAME device extension!
+    //        [x] Ensure that the other settings (which are unused in our case) are zero-initialized!
+    //        [ ] Finally, use vkCreateDevice to create the device and assign its handle to vk_device!
+
+    VkDeviceQueueCreateInfo vk_device_queue_create_info = {};
+    vk_device_queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    vk_device_queue_create_info.queueFamilyIndex = selected_queue_family_index;
+    vk_device_queue_create_info.queueCount = 1;
+    float queue_priority = 1.0f;
+    vk_device_queue_create_info.pQueuePriorities = &queue_priority;
 
     if (!vk_device) {
         VKL_EXIT_WITH_ERROR("No VkDevice created or handle not assigned.");
@@ -345,6 +433,21 @@ uint32_t selectPhysicalDeviceIndex(const std::vector<VkPhysicalDevice>& physical
     return selectPhysicalDeviceIndex(physical_devices.data(), static_cast<uint32_t>(physical_devices.size()), surface);
 }
 
+// If a discrete gpu is found return it, else return the first device
+VkPhysicalDevice trySelectFirstDiscreteGPU(const std::vector<VkPhysicalDevice>& devices) {
+    
+    for (const auto& device : devices) {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(device, &properties);
+
+        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            return device;
+    }
+        
+    VKL_LOG("Falling back to first device");
+    return devices[0];
+}
+
 uint32_t selectQueueFamilyIndex(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
     // Get the number of different queue families for the given physical device:
     uint32_t queue_family_count = 0;
@@ -353,6 +456,23 @@ uint32_t selectQueueFamilyIndex(VkPhysicalDevice physical_device, VkSurfaceKHR s
     // Get the queue families' data:
     std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, queue_families.data());
+
+    // copy paste from function above
+    for (uint32_t queue_family_index = 0u; queue_family_index < queue_family_count; ++queue_family_index) {
+        // If this physical device supports a queue family which supports both, graphics and presentation
+        //  => select this physical device
+        if ((queue_families[queue_family_index].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
+            // This queue supports graphics! Let's see if it also supports presentation:
+            VkBool32 presentation_supported;
+            vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, queue_family_index, surface, &presentation_supported);
+
+            if (VK_TRUE == presentation_supported) {
+                // We've found a suitable physical device
+                return queue_family_index;
+            }
+        }
+    }
+
     VKL_EXIT_WITH_ERROR("Unable to find a suitable queue family that supports graphics and presentation on the same queue.");
 }
 
