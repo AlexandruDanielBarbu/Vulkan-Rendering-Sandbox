@@ -300,10 +300,10 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // TODOs: [x] Create an instance of VkDeviceCreateInfo and use it to create one queue!
     //        [x] Hook in the address of the VkDeviceQueueCreateInfo instance at the right place!
-    //        [ ] Use VkDeviceCreateInfo::enabledExtensionCount and VkDeviceCreateInfo::ppEnabledExtensionNames
+    //        [x] Use VkDeviceCreateInfo::enabledExtensionCount and VkDeviceCreateInfo::ppEnabledExtensionNames
     //            to enable the VK_KHR_SWAPCHAIN_EXTENSION_NAME device extension!
     //        [x] Ensure that the other settings (which are unused in our case) are zero-initialized!
-    //        [ ] Finally, use vkCreateDevice to create the device and assign its handle to vk_device!
+    //        [x] Finally, use vkCreateDevice to create the device and assign its handle to vk_device!
 
     VkDeviceQueueCreateInfo vk_device_queue_create_info = {};
     vk_device_queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -312,13 +312,29 @@ int main(int argc, char** argv) {
     float queue_priority = 1.0f;
     vk_device_queue_create_info.pQueuePriorities = &queue_priority;
 
+    VkDeviceCreateInfo vk_device_create_info = {};
+    vk_device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    vk_device_create_info.queueCreateInfoCount = 1;
+    vk_device_create_info.pQueueCreateInfos = &vk_device_queue_create_info;
+    vk_device_create_info.enabledExtensionCount = 1;
+    const char* device_extensions[] = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
+    vk_device_create_info.ppEnabledExtensionNames = device_extensions;
+
+    VkResult resVkDevice = vkCreateDevice(vk_physical_device, &vk_device_create_info, NULL, &vk_device);
+
     if (!vk_device) {
         VKL_EXIT_WITH_ERROR("No VkDevice created or handle not assigned.");
     }
+    if (resVkDevice != VK_SUCCESS) {
+        VKL_EXIT_WITH_ERROR("Something bad happened to vk_device.");
 
-    // TODO: After device creation, use vkGetDeviceQueue to get the one and only created queue!
-    //       Assign its handle to vk_queue!
+    }
+    // After device creation, use vkGetDeviceQueue to get the one and only created queue!
+    // Assign its handle to vk_queue!
 
+    vkGetDeviceQueue(vk_device, selected_queue_family_index, 0, &vk_queue);
     if (!vk_queue) {
         VKL_EXIT_WITH_ERROR("No VkQueue selected or handle not assigned.");
     }
@@ -346,22 +362,44 @@ int main(int argc, char** argv) {
     swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swapchain_create_info.clipped = VK_TRUE;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchain_create_info.queueFamilyIndexCount = queueFamilyIndexCount;
-    swapchain_create_info.pQueueFamilyIndices = queueFamilyIndices.data();
     // TODO: Provide values for:
-    //        - VkSwapchainCreateInfoKHR::queueFamilyIndexCount
-    //        - VkSwapchainCreateInfoKHR::pQueueFamilyIndices
-    //        - VkSwapchainCreateInfoKHR::imageFormat
-    //        - VkSwapchainCreateInfoKHR::imageColorSpace
-    //        - VkSwapchainCreateInfoKHR::imageExtent
-    //        - VkSwapchainCreateInfoKHR::presentMode
-    //
-    // TODO: Create the swapchain using vkCreateSwapchainKHR and assign its handle to vk_swapchain!
+    //        [x] VkSwapchainCreateInfoKHR::queueFamilyIndexCount
+    //        [x] VkSwapchainCreateInfoKHR::pQueueFamilyIndices
+    //        [x] VkSwapchainCreateInfoKHR::imageFormat
+    //        [x] VkSwapchainCreateInfoKHR::imageColorSpace
+    //        [x] VkSwapchainCreateInfoKHR::imageExtent
+    //        [X] VkSwapchainCreateInfoKHR::presentMode
+
+    // I don't understand these two lines fully !!!!
+    swapchain_create_info.queueFamilyIndexCount = 0;
+    swapchain_create_info.pQueueFamilyIndices = NULL;
+
+    VkSurfaceFormatKHR surface_format = getSurfaceImageFormat(vk_physical_device, vk_surface);
+    swapchain_create_info.imageFormat = surface_format.format;
+    swapchain_create_info.imageColorSpace = surface_format.colorSpace;
+    
+    VkExtent2D window_dimensions;
+    window_dimensions.width = window_width;
+    window_dimensions.height = window_height;
+    swapchain_create_info.imageExtent = window_dimensions;
+    
+    swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+    // Create the swapchain using vkCreateSwapchainKHR and assign its handle to vk_swapchain!
+    VkResult resCreateSwapchainKHR = vkCreateSwapchainKHR(vk_device, &swapchain_create_info, NULL, &vk_swapchain);
     if (!vk_swapchain) {
         VKL_EXIT_WITH_ERROR("No VkSwapchainKHR created or handle not assigned.");
     }
+    if (resCreateSwapchainKHR != VK_SUCCESS) {
+        VKL_EXIT_WITH_ERROR("VkSwapchainKHR does not have VK_SUCCESS status.");
+    }
 
-    // TODO: Use vkGetSwapchainImagesKHR to retrieve the created VkImage handles and store them in a collection (e.g., std::vector)!
+    // Use vkGetSwapchainImagesKHR to retrieve the created VkImage handles and store them in a collection (e.g., std::vector)!
+    uint32_t swapchainCount;
+    vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, NULL);
+    std::vector< VkImage> vk_swapchain_images(swapchainCount);
+    vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, vk_swapchain_images.data());
+
     VKL_LOG("Subtask 1.8 done.");
 
     /* --------------------------------------------- */
@@ -370,6 +408,8 @@ int main(int argc, char** argv) {
 
     // Gather swapchain config as required by the framework:
     VklSwapchainConfig swapchain_config = {};
+    swapchain_config.swapchainHandle = vk_swapchain;
+    swapchain_config.imageExtent = window_dimensions;
 
     // Init the framework:
     if (!gcgInitFramework(vk_instance, vk_surface, vk_physical_device, vk_device, vk_queue, swapchain_config)) {
