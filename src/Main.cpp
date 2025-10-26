@@ -84,6 +84,13 @@ void errorCallbackFromGlfw(int error, const char* description) { std::cout << "G
 // Main
 /* --------------------------------------------- */
 
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+}
+
 int main(int argc, char** argv) {
     VKL_LOG(WELCOME_MSG);
 
@@ -123,7 +130,6 @@ int main(int argc, char** argv) {
     // Get a valid window handle and assign to window
     // Note that i used the above mentioned variable called monitor.
     GLFWwindow* window = glfwCreateWindow(window_width, window_height, window_title.c_str(), monitor, NULL);
-
     if (!window) {
         VKL_LOG("If your program reaches this point, that means two things:");
         VKL_LOG("1) Project setup was successful. Everything is working fine.");
@@ -131,6 +137,9 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("No GLFW window created.");
     }
     VKL_LOG("Subtask 1.2 done.");
+    
+    glfwSetKeyCallback(window, key_callback);
+
 
     VkResult result;
     VkInstance vk_instance = VK_NULL_HANDLE;              // To be set during Subtask 1.3
@@ -165,6 +174,9 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("No GLFW extensions supported to display things around.");
     }
 
+    std::vector<const char*> instance_extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    
     // Get all supported extensions
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
@@ -187,8 +199,8 @@ int main(int argc, char** argv) {
     }
 
     // Hook in required_extensions using VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames!
-    instance_create_info.enabledExtensionCount = glfwExtensionCount;
-    instance_create_info.ppEnabledExtensionNames = glfwExtensions;
+    instance_create_info.enabledExtensionCount = static_cast<uint32_t>(instance_extensions.size());
+    instance_create_info.ppEnabledExtensionNames = instance_extensions.data();
 
     // Hook in enabled_layers using VkInstanceCreateInfo::enabledLayerCount and VkInstanceCreateInfo::ppEnabledLayerNames!
     instance_create_info.enabledLayerCount = 1;
@@ -217,6 +229,8 @@ int main(int argc, char** argv) {
     }
     
     // Use vkCreateInstance to create a vulkan instance handle! Assign it to vk_instance!
+    //glfwExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
     VkResult errCreateInstance = vkCreateInstance(&instance_create_info, NULL, &vk_instance);
     
     if (!vk_instance) {
@@ -370,7 +384,6 @@ int main(int argc, char** argv) {
     //        [x] VkSwapchainCreateInfoKHR::imageExtent
     //        [X] VkSwapchainCreateInfoKHR::presentMode
 
-    // I don't understand these two lines fully !!!!
     swapchain_create_info.queueFamilyIndexCount = 0;
     swapchain_create_info.pQueueFamilyIndices = NULL;
 
@@ -410,6 +423,19 @@ int main(int argc, char** argv) {
     VklSwapchainConfig swapchain_config = {};
     swapchain_config.swapchainHandle = vk_swapchain;
     swapchain_config.imageExtent = window_dimensions;
+    swapchain_config.swapchainImages.resize(swapchainCount);
+    for (uint32_t i = 0; i < swapchainCount; i++) {
+        auto& fbuffComp = swapchain_config.swapchainImages[i];
+
+        fbuffComp.colorAttachmentImageDetails.imageHandle = vk_swapchain_images[i];
+        fbuffComp.colorAttachmentImageDetails.imageFormat = surface_format.format;
+        fbuffComp.colorAttachmentImageDetails.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        fbuffComp.colorAttachmentImageDetails.clearValue = {};
+        fbuffComp.colorAttachmentImageDetails.clearValue.color = { {0.14f, 0.4f, 0.37f, 1.0f} };
+
+
+        fbuffComp.depthAttachmentImageDetails = {};
+    }
 
     // Init the framework:
     if (!gcgInitFramework(vk_instance, vk_surface, vk_physical_device, vk_device, vk_queue, swapchain_config)) {
@@ -421,6 +447,34 @@ int main(int argc, char** argv) {
     // Subtask 1.10: Set-up the Render Loop
     // Subtask 1.11: Register a Key Callback
     /* --------------------------------------------- */
+    while (!glfwWindowShouldClose(window)) {
+        //for (uint32_t i = 0; i < swapchain_config.swapchainImages.size(); i++) {
+        //    auto& fbuffComp = swapchain_config.swapchainImages[i];
+        //    fbuffComp.colorAttachmentImageDetails.clearValue.color = { {0.14f, 0.4f, 0.37f, 1.0f} };
+        //}
+
+        glfwPollEvents();
+
+        vklWaitForNextSwapchainImage();
+        vklStartRecordingCommands();
+        
+        gcgDrawTeapot();
+        
+        vklEndRecordingCommands();
+        vklPresentCurrentSwapchainImage();
+
+        if (cmdline_args.run_headless) {
+            uint32_t idx = vklGetCurrentSwapChainImageIndex();
+            std::string screenshot_filename = "screenshot";
+            if (cmdline_args.set_filename) {
+                screenshot_filename = cmdline_args.filename;
+            }
+            gcgSaveScreenshot(screenshot_filename, vk_swapchain_images[idx],
+                window_width, window_height, surface_format.format, vk_device, vk_physical_device,
+                vk_queue, selected_queue_family_index);
+            break;
+        }
+    }
 
     // Wait for all GPU work to finish before cleaning up:
     vkDeviceWaitIdle(vk_device);
@@ -429,6 +483,12 @@ int main(int argc, char** argv) {
     // Subtask 1.12: Cleanup
     /* --------------------------------------------- */
     gcgDestroyFramework();
+    
+    vkDestroySwapchainKHR(vk_device, vk_swapchain, NULL);
+    vkDestroyDevice(vk_device, NULL);
+    vkDestroySurfaceKHR(vk_instance, vk_surface, NULL);
+    vkDestroyInstance(vk_instance, NULL);
+    glfwDestroyWindow(window);
 
     return EXIT_SUCCESS;
 }
