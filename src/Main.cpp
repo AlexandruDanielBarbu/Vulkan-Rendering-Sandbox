@@ -444,6 +444,39 @@ int main(int argc, char** argv) {
     VKL_LOG("Subtask 1.9 done.");
 
     /* --------------------------------------------- */
+    // Subtask 2.1: Custom Graphics Pipeline
+    /* --------------------------------------------- */
+    VklGraphicsPipelineConfig config = {};
+    std::string vertexPath = gcgLoadShaderFilePath("assets\\shader\\testVertex.vert");
+    config.vertexShaderPath = vertexPath.c_str();
+    
+    std::string fragPath = gcgLoadShaderFilePath("assets\\shader\\testFrag.frag");
+    config.fragmentShaderPath = fragPath.c_str();
+    
+    config.vertexInputBuffers.resize(1);
+    config.vertexInputBuffers[0] = {};
+    config.vertexInputBuffers[0].binding = 0;
+    config.vertexInputBuffers[0].stride = 3 * sizeof(float);
+    config.vertexInputBuffers[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    config.inputAttributeDescriptions.resize(1);
+    config.inputAttributeDescriptions[0] = {};
+    config.inputAttributeDescriptions[0].location = 0;
+    config.inputAttributeDescriptions[0].binding = 0;
+    config.inputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    config.inputAttributeDescriptions[0].offset = 0;
+    
+    config.polygonDrawMode = VK_POLYGON_MODE_FILL;
+    config.triangleCullingMode = VK_CULL_MODE_NONE;
+
+    VkPipeline vk_pipeline = VK_NULL_HANDLE;
+    vk_pipeline = vklCreateGraphicsPipeline(config);
+
+    if (vk_pipeline == VK_NULL_HANDLE) {
+        VKL_EXIT_WITH_ERROR("Failed to init the custom pipeline.");
+    }
+
+    /* --------------------------------------------- */
     // Subtask 1.10: Set-up the Render Loop
     // Subtask 1.11: Register a Key Callback
     /* --------------------------------------------- */
@@ -458,11 +491,13 @@ int main(int argc, char** argv) {
         vklWaitForNextSwapchainImage();
         vklStartRecordingCommands();
         
-        gcgDrawTeapot();
+        gcgDrawTeapot(vk_pipeline);
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
 
+
+        // GCG specific code
         if (cmdline_args.run_headless) {
             uint32_t idx = vklGetCurrentSwapChainImageIndex();
             std::string screenshot_filename = "screenshot";
