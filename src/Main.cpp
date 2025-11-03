@@ -476,6 +476,8 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("Failed to init the custom pipeline.");
     }
 
+    vklEnablePipelineHotReloading(window, GLFW_KEY_F5);
+
     /* --------------------------------------------- */
     // Subtask 1.10: Set-up the Render Loop
     // Subtask 1.11: Register a Key Callback
@@ -517,8 +519,8 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 1.12: Cleanup
     /* --------------------------------------------- */
+    vklDestroyGraphicsPipeline(vk_pipeline);
     gcgDestroyFramework();
-    
     vkDestroySwapchainKHR(vk_device, vk_swapchain, NULL);
     vkDestroyDevice(vk_device, NULL);
     vkDestroySurfaceKHR(vk_instance, vk_surface, NULL);
