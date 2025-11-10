@@ -463,7 +463,13 @@ int main(int argc, char** argv) {
     config.inputAttributeDescriptions[0].binding = 0;
     config.inputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     config.inputAttributeDescriptions[0].offset = 0;
-    
+
+    config.polygonDrawMode = VK_POLYGON_MODE_FILL;
+    config.triangleCullingMode = VK_CULL_MODE_NONE;
+
+    /* --------------------------------------------- */
+    // Subtask 2.2: Uniform buffer
+    /* --------------------------------------------- */
     config.descriptorLayout.resize(1, {});
     config.descriptorLayout[0].binding = 0;
     config.descriptorLayout[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -471,23 +477,15 @@ int main(int argc, char** argv) {
     config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     config.descriptorLayout[0].pImmutableSamplers = NULL;
 
-    config.polygonDrawMode = VK_POLYGON_MODE_FILL;
-    config.triangleCullingMode = VK_CULL_MODE_NONE;
-
-    /* --------------------------------------------- */
-    // Subtask 2.2: Uniform buffer
-    // 
-    // > the most cursed task so far.....
-    /* --------------------------------------------- */
     VkBuffer uniform_buffer = vklCreateHostCoherentBufferWithBackingMemory(
         4 * sizeof(float), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
     );
     std::vector<float> model_color = { 1.0f, 0.5f, 0.0f, 1.0f };
     vklCopyDataIntoHostCoherentBuffer(uniform_buffer, model_color.data(), 4 * sizeof(float));
     
-    // all of this just to get a vk descriptor set...
-    // not happy guys... not happy
-    
+    /* --------------------------------------------- */
+    // Subtask 2.3: Uniform buffer
+    /* --------------------------------------------- */
     // descriptor pool
     VkDescriptorPoolSize poolSize = {};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -528,8 +526,6 @@ int main(int argc, char** argv) {
     VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
     vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet);
 
-    // but wait! I am not finished!
-    
     // write uniform buffer into descriptor set
     VkDescriptorBufferInfo bufferInfo = {};
     bufferInfo.buffer = uniform_buffer; 
