@@ -1,7 +1,11 @@
 #version 450
 
+layout(binding = 0) uniform ColorBuffer {
+    vec4 color;
+} uColor;
+
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    outColor = vec4(0.0, 0.0, 1.0, 1.0); // blue color (R, G, B, A)
+    outColor = uColor.color;
 }

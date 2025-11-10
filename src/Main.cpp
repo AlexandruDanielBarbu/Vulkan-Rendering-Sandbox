@@ -453,21 +453,99 @@ int main(int argc, char** argv) {
     std::string fragPath = gcgLoadShaderFilePath("assets\\shader\\testFrag.frag");
     config.fragmentShaderPath = fragPath.c_str();
     
-    config.vertexInputBuffers.resize(1);
-    config.vertexInputBuffers[0] = {};
+    config.vertexInputBuffers.resize(1, {});
     config.vertexInputBuffers[0].binding = 0;
     config.vertexInputBuffers[0].stride = 3 * sizeof(float);
     config.vertexInputBuffers[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    config.inputAttributeDescriptions.resize(1);
-    config.inputAttributeDescriptions[0] = {};
+    config.inputAttributeDescriptions.resize(1, {});
     config.inputAttributeDescriptions[0].location = 0;
     config.inputAttributeDescriptions[0].binding = 0;
     config.inputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     config.inputAttributeDescriptions[0].offset = 0;
     
+    config.descriptorLayout.resize(1, {});
+    config.descriptorLayout[0].binding = 0;
+    config.descriptorLayout[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    config.descriptorLayout[0].descriptorCount = 1;
+    config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    config.descriptorLayout[0].pImmutableSamplers = NULL;
+
     config.polygonDrawMode = VK_POLYGON_MODE_FILL;
     config.triangleCullingMode = VK_CULL_MODE_NONE;
+
+    /* --------------------------------------------- */
+    // Subtask 2.2: Uniform buffer
+    // 
+    // > the most cursed task so far.....
+    /* --------------------------------------------- */
+    VkBuffer uniform_buffer = vklCreateHostCoherentBufferWithBackingMemory(
+        4 * sizeof(float), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+    );
+    std::vector<float> model_color = { 1.0f, 0.5f, 0.0f, 1.0f };
+    vklCopyDataIntoHostCoherentBuffer(uniform_buffer, model_color.data(), 4 * sizeof(float));
+    
+    // all of this just to get a vk descriptor set...
+    // not happy guys... not happy
+    
+    // descriptor pool
+    VkDescriptorPoolSize poolSize = {};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = 1;
+
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+    vkCreateDescriptorPool(vk_device, &poolInfo, nullptr, &descriptorPool);
+
+    // descriptor set layout
+    VkDescriptorSetLayoutBinding layoutBinding = {};
+    layoutBinding.binding = 0;
+    layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layoutBinding.descriptorCount = 1;
+    layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    layoutBinding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &layoutBinding;
+
+    VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+    vkCreateDescriptorSetLayout(vk_device, &layoutInfo, nullptr, &descriptorSetLayout);
+
+    // allocate the descriptor set
+    VkDescriptorSetAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &descriptorSetLayout;
+
+    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+    vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet);
+
+    // but wait! I am not finished!
+    
+    // write uniform buffer into descriptor set
+    VkDescriptorBufferInfo bufferInfo = {};
+    bufferInfo.buffer = uniform_buffer; 
+    bufferInfo.offset = 0;
+    bufferInfo.range = 4 * sizeof(float);
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = descriptorSet;
+    write.dstBinding = 0;
+    write.dstArrayElement = 0;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.descriptorCount = 1;
+    write.pBufferInfo = &bufferInfo;
+
+    vkUpdateDescriptorSets(vk_device, 1, &write, 0, nullptr);
 
     VkPipeline vk_pipeline = VK_NULL_HANDLE;
     vk_pipeline = vklCreateGraphicsPipeline(config);
@@ -483,17 +561,12 @@ int main(int argc, char** argv) {
     // Subtask 1.11: Register a Key Callback
     /* --------------------------------------------- */
     while (!glfwWindowShouldClose(window)) {
-        //for (uint32_t i = 0; i < swapchain_config.swapchainImages.size(); i++) {
-        //    auto& fbuffComp = swapchain_config.swapchainImages[i];
-        //    fbuffComp.colorAttachmentImageDetails.clearValue.color = { {0.14f, 0.4f, 0.37f, 1.0f} };
-        //}
-
         glfwPollEvents();
 
         vklWaitForNextSwapchainImage();
         vklStartRecordingCommands();
         
-        gcgDrawTeapot(vk_pipeline);
+        gcgDrawTeapot(vk_pipeline, descriptorSet);
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
@@ -519,8 +592,13 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 1.12: Cleanup
     /* --------------------------------------------- */
+    vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer);
     vklDestroyGraphicsPipeline(vk_pipeline);
+    vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
+    
     gcgDestroyFramework();
+    
     vkDestroySwapchainKHR(vk_device, vk_swapchain, NULL);
     vkDestroyDevice(vk_device, NULL);
     vkDestroySurfaceKHR(vk_instance, vk_surface, NULL);
