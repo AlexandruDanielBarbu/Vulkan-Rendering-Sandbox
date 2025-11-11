@@ -91,6 +91,18 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
+glm::vec3 YawPitchToDirection(float yaw, float pitch)
+{
+    // yaw = rotation around Y axis
+    // pitch = rotation around X axis
+    // both in radians
+    glm::vec3 dir;
+    dir.x = cos(pitch) * sin(yaw);
+    dir.y = sin(pitch);
+    dir.z = cos(pitch) * cos(yaw);
+    return glm::normalize(dir);
+}
+
 int main(int argc, char** argv) {
     VKL_LOG(WELCOME_MSG);
 
@@ -100,12 +112,58 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 1.1: Load Settings From File
     /* --------------------------------------------- */
-
+    // Window
     INIReader window_reader("assets/settings/window.ini");
     int window_width = window_reader.GetInteger("window", "width", 800);
     int window_height = window_reader.GetInteger("window", "height", 800);
     bool fullscreen = false;
     std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
+
+    // Camera
+    // Settings
+    std::string init_camera_filepath = "assets/settings/camera_front.ini";
+    if (cmdline_args.init_camera)
+        init_camera_filepath = cmdline_args.init_camera_filepath;
+    
+    INIReader camera_reader(init_camera_filepath);
+    double camera_fov = camera_reader.GetReal("camera", "fov", 10);
+    double camera_near = camera_reader.GetReal("camera", "near", 10);
+    double camera_far = camera_reader.GetReal("camera", "far", 20);
+    double camera_yaw = camera_reader.GetReal("camera", "yaw", 10);
+    double camera_pitch = camera_reader.GetReal("camera", "pitch", 10);
+    
+    double aspect_ratio = (double) window_width / (double) window_height;
+    
+    // Matrix Work
+    glm::mat4 projection_matrix = gcgCreatePerspectiveProjectionMatrix(
+        glm::radians(camera_fov),
+        aspect_ratio,
+        camera_near,
+        camera_far
+    );
+
+    float zoom = 5.0f;
+    glm::vec3 direction(
+        cos(camera_pitch) * sin(camera_yaw),
+        sin(camera_pitch),
+        cos(camera_pitch) * cos(camera_yaw)
+    );
+    direction = glm::normalize(direction);
+
+    glm::vec3 camera_pos = glm::vec3(0.0f, 0.0f, 0.0f) - direction * zoom;
+    glm::mat4 camera_translation = glm::translate(glm::mat4(1.0f), camera_pos);
+    
+    glm::mat4 rx = glm::rotate(glm::mat4(1.0f), (float)camera_pitch, glm::vec3(1.0f, 0.0f, 0.0f));
+    glm::mat4 ry = glm::rotate(glm::mat4(1.0f), (float) camera_yaw, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 camera_rotation = ry * rx;
+    
+    glm::mat4 camera_transform = camera_rotation * camera_translation;
+    
+    // nu merge view matrix :(((
+    //glm::mat4 view = glm::inverse(camera_transform);
+    glm::mat4 view = glm::lookAt(camera_pos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    glm::mat4 view_projection = projection_matrix * view;
 
     // Install a callback function, which gets invoked whenever a GLFW error occurred.
     glfwSetErrorCallback(errorCallbackFromGlfw);
@@ -474,15 +532,27 @@ int main(int argc, char** argv) {
     config.descriptorLayout[0].binding = 0;
     config.descriptorLayout[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     config.descriptorLayout[0].descriptorCount = 1;
-    config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     config.descriptorLayout[0].pImmutableSamplers = nullptr;
 
-    VkBuffer uniform_buffer = vklCreateHostCoherentBufferWithBackingMemory(
-        4 * sizeof(float), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-    );
-    std::vector<float> model_color = { 1.0f, 0.5f, 0.0f, 1.0f };
-    vklCopyDataIntoHostCoherentBuffer(uniform_buffer, model_color.data(), 4 * sizeof(float));
+    /* --------------------------------------------- */
+    // Subtask 2.4: Uniform buffer struct
+    /* --------------------------------------------- */
+    struct UniformBufferObject
+    {
+        glm::vec4 color;
+        glm::mat4 view_proj;
+    };
+
+    UniformBufferObject ubo = {};
+    ubo.color = { 1.0f, 0.5f, 0.0f, 1.0f };
+    ubo.view_proj = view_projection;
     
+    VkBuffer uniform_buffer = vklCreateHostCoherentBufferWithBackingMemory(
+        sizeof(ubo), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+    );
+    vklCopyDataIntoHostCoherentBuffer(uniform_buffer, &ubo, sizeof(ubo));
+
     /* --------------------------------------------- */
     // Subtask 2.3: Uniform buffer
     /* --------------------------------------------- */
@@ -507,7 +577,7 @@ int main(int argc, char** argv) {
     layoutBinding.binding = 0;
     layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     layoutBinding.descriptorCount = 1;
-    layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    layoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     layoutBinding.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
