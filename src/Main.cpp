@@ -143,6 +143,8 @@ int main(int argc, char** argv) {
     );
 
     float zoom = 5.0f;
+    glm::vec3 target(0.0f, 0.0f, 0.0f);
+    glm::vec3 global_up(0.0f, 1.0f, 0.0f);
     glm::vec3 direction(
         cos(camera_pitch) * sin(camera_yaw),
         sin(camera_pitch),
@@ -150,18 +152,22 @@ int main(int argc, char** argv) {
     );
     direction = glm::normalize(direction);
 
-    glm::vec3 camera_pos = glm::vec3(0.0f, 0.0f, 0.0f) - direction * zoom;
-    glm::mat4 camera_translation = glm::translate(glm::mat4(1.0f), camera_pos);
-    
-    glm::mat4 rx = glm::rotate(glm::mat4(1.0f), (float)camera_pitch, glm::vec3(1.0f, 0.0f, 0.0f));
-    glm::mat4 ry = glm::rotate(glm::mat4(1.0f), (float) camera_yaw, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 camera_rotation = ry * rx;
-    
-    glm::mat4 camera_transform = camera_rotation * camera_translation;
-    
-    // nu merge view matrix :(((
-    //glm::mat4 view = glm::inverse(camera_transform);
-    glm::mat4 view = glm::lookAt(camera_pos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::vec3 camera_pos = direction * zoom;
+
+    glm::vec3 forward = glm::normalize(target - camera_pos);
+    glm::vec3 right = glm::normalize(glm::cross(global_up, forward));
+    glm::vec3 up = glm::cross(forward, right);
+
+    glm::mat4 rotation = glm::mat4(
+        glm::vec4(right, 0.0f),
+        glm::vec4(up, 0.0f),
+        glm::vec4(-forward, 0.0f),
+        glm::vec4(0, 0, 0, 1)
+    );
+
+    glm::mat4 translation = glm::translate(glm::mat4(1.0f), -camera_pos);
+
+    glm::mat4 view = rotation * translation;
 
     glm::mat4 view_projection = projection_matrix * view;
 
