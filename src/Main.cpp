@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
 
     // Get a valid window handle and assign to window
     // Note that i used the above mentioned variable called monitor.
-    GLFWwindow* window = glfwCreateWindow(window_width, window_height, window_title.c_str(), monitor, NULL);
+    GLFWwindow* window = glfwCreateWindow(window_width, window_height, window_title.c_str(), monitor, nullptr);
     if (!window) {
         VKL_LOG("If your program reaches this point, that means two things:");
         VKL_LOG("1) Project setup was successful. Everything is working fine.");
@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    if (glfwExtensions == NULL) {
+    if (glfwExtensions == nullptr) {
         VKL_EXIT_WITH_ERROR("No GLFW extensions supported to display things around.");
     }
 
@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
     
     // Get supported Layer count
     uint32_t layerCount = 0;
-    vkEnumerateInstanceLayerProperties(&layerCount, NULL);
+    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
     // Get the layer names
     std::vector<VkLayerProperties> availableLayers(layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
@@ -231,7 +231,7 @@ int main(int argc, char** argv) {
     // Use vkCreateInstance to create a vulkan instance handle! Assign it to vk_instance!
     //glfwExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
-    VkResult errCreateInstance = vkCreateInstance(&instance_create_info, NULL, &vk_instance);
+    VkResult errCreateInstance = vkCreateInstance(&instance_create_info, nullptr, &vk_instance);
     
     if (!vk_instance) {
         VKL_EXIT_WITH_ERROR("No VkInstance created or handle not assigned.");
@@ -246,7 +246,7 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Use glfwCreateWindowSurface to create a window surface! Assign its handle to vk_surface!
     
-    VkResult errSurface = glfwCreateWindowSurface(vk_instance, window, NULL, &vk_surface);
+    VkResult errSurface = glfwCreateWindowSurface(vk_instance, window, nullptr, &vk_surface);
 
     if (!vk_surface) {
         VKL_EXIT_WITH_ERROR("No VkSurfaceKHR created or handle not assigned.");
@@ -265,7 +265,7 @@ int main(int argc, char** argv) {
 
     // Get number of devices
     uint32_t physicalDeviceCount = 0;
-    vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, NULL);
+    vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, nullptr);
     // Get devices in an array
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
     vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, physicalDevices.data());
@@ -336,7 +336,7 @@ int main(int argc, char** argv) {
     };
     vk_device_create_info.ppEnabledExtensionNames = device_extensions;
 
-    VkResult resVkDevice = vkCreateDevice(vk_physical_device, &vk_device_create_info, NULL, &vk_device);
+    VkResult resVkDevice = vkCreateDevice(vk_physical_device, &vk_device_create_info, nullptr, &vk_device);
 
     if (!vk_device) {
         VKL_EXIT_WITH_ERROR("No VkDevice created or handle not assigned.");
@@ -385,7 +385,7 @@ int main(int argc, char** argv) {
     //        [X] VkSwapchainCreateInfoKHR::presentMode
 
     swapchain_create_info.queueFamilyIndexCount = 0;
-    swapchain_create_info.pQueueFamilyIndices = NULL;
+    swapchain_create_info.pQueueFamilyIndices = nullptr;
 
     VkSurfaceFormatKHR surface_format = getSurfaceImageFormat(vk_physical_device, vk_surface);
     swapchain_create_info.imageFormat = surface_format.format;
@@ -399,7 +399,7 @@ int main(int argc, char** argv) {
     swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
     // Create the swapchain using vkCreateSwapchainKHR and assign its handle to vk_swapchain!
-    VkResult resCreateSwapchainKHR = vkCreateSwapchainKHR(vk_device, &swapchain_create_info, NULL, &vk_swapchain);
+    VkResult resCreateSwapchainKHR = vkCreateSwapchainKHR(vk_device, &swapchain_create_info, nullptr, &vk_swapchain);
     if (!vk_swapchain) {
         VKL_EXIT_WITH_ERROR("No VkSwapchainKHR created or handle not assigned.");
     }
@@ -409,7 +409,7 @@ int main(int argc, char** argv) {
 
     // Use vkGetSwapchainImagesKHR to retrieve the created VkImage handles and store them in a collection (e.g., std::vector)!
     uint32_t swapchainCount;
-    vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, NULL);
+    vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, nullptr);
     std::vector< VkImage> vk_swapchain_images(swapchainCount);
     vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, vk_swapchain_images.data());
 
@@ -475,7 +475,7 @@ int main(int argc, char** argv) {
     config.descriptorLayout[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     config.descriptorLayout[0].descriptorCount = 1;
     config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    config.descriptorLayout[0].pImmutableSamplers = NULL;
+    config.descriptorLayout[0].pImmutableSamplers = nullptr;
 
     VkBuffer uniform_buffer = vklCreateHostCoherentBufferWithBackingMemory(
         4 * sizeof(float), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
@@ -489,17 +489,19 @@ int main(int argc, char** argv) {
     // descriptor pool
     VkDescriptorPoolSize poolSize = {};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = 1;
+    poolSize.descriptorCount = 8;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = 1;
     poolInfo.pPoolSizes = &poolSize;
-    poolInfo.maxSets = 1;
+    poolInfo.maxSets = 8;
 
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-    vkCreateDescriptorPool(vk_device, &poolInfo, nullptr, &descriptorPool);
-
+    VkResult resCreateDescPool = vkCreateDescriptorPool(vk_device, &poolInfo, nullptr, &descriptorPool);
+    if (resCreateDescPool != VK_SUCCESS)
+        VKL_EXIT_WITH_ERROR("Failed to create descriptor pool");
+    
     // descriptor set layout
     VkDescriptorSetLayoutBinding layoutBinding = {};
     layoutBinding.binding = 0;
@@ -514,8 +516,10 @@ int main(int argc, char** argv) {
     layoutInfo.pBindings = &layoutBinding;
 
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-    vkCreateDescriptorSetLayout(vk_device, &layoutInfo, nullptr, &descriptorSetLayout);
-
+    VkResult resCreateDescSetLayout = vkCreateDescriptorSetLayout(vk_device, &layoutInfo, nullptr, &descriptorSetLayout);
+    if (resCreateDescSetLayout != VK_SUCCESS)
+        VKL_EXIT_WITH_ERROR("Failed to create descriptor set layout");
+    
     // allocate the descriptor set
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -524,7 +528,9 @@ int main(int argc, char** argv) {
     allocInfo.pSetLayouts = &descriptorSetLayout;
 
     VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-    vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet);
+    VkResult resAllocateDescSets = vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet);
+    if (resAllocateDescSets != VK_SUCCESS)
+        VKL_EXIT_WITH_ERROR("Failed to allocate descriptor sets");
 
     // write uniform buffer into descriptor set
     VkDescriptorBufferInfo bufferInfo = {};
@@ -595,10 +601,10 @@ int main(int argc, char** argv) {
     
     gcgDestroyFramework();
     
-    vkDestroySwapchainKHR(vk_device, vk_swapchain, NULL);
-    vkDestroyDevice(vk_device, NULL);
-    vkDestroySurfaceKHR(vk_instance, vk_surface, NULL);
-    vkDestroyInstance(vk_instance, NULL);
+    vkDestroySwapchainKHR(vk_device, vk_swapchain, nullptr);
+    vkDestroyDevice(vk_device, nullptr);
+    vkDestroySurfaceKHR(vk_instance, vk_surface, nullptr);
+    vkDestroyInstance(vk_instance, nullptr);
     glfwDestroyWindow(window);
 
     return EXIT_SUCCESS;
