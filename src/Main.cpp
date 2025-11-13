@@ -119,18 +119,19 @@ int main(int argc, char** argv) {
     bool fullscreen = false;
     std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
 
-    // Camera
-    // Settings
+    /* --------------------------------------------- */
+    // Subtask 2.4: Load Camera Settings From File
+    /* --------------------------------------------- */
     std::string init_camera_filepath = "assets/settings/camera_front.ini";
     if (cmdline_args.init_camera)
         init_camera_filepath = cmdline_args.init_camera_filepath;
     
     INIReader camera_reader(init_camera_filepath);
-    double camera_fov = camera_reader.GetReal("camera", "fov", 10);
+    double camera_fov = camera_reader.GetReal("camera", "fov", 10);  // not in radians
     double camera_near = camera_reader.GetReal("camera", "near", 10);
     double camera_far = camera_reader.GetReal("camera", "far", 20);
-    double camera_yaw = camera_reader.GetReal("camera", "yaw", 10);
-    double camera_pitch = camera_reader.GetReal("camera", "pitch", 10);
+    double camera_yaw = camera_reader.GetReal("camera", "yaw", 10);  // radians
+    double camera_pitch = camera_reader.GetReal("camera", "pitch", 10);  // radians
     
     double aspect_ratio = (double) window_width / (double) window_height;
     
@@ -544,20 +545,34 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 2.4: Uniform buffer struct
     /* --------------------------------------------- */
-    struct UniformBufferObject
-    {
+    struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 view_proj;
     };
 
-    UniformBufferObject ubo = {};
-    ubo.color = { 1.0f, 0.5f, 0.0f, 1.0f };
-    ubo.view_proj = view_projection;
+    UniformBufferObject ubo_teapot1 = {};
+    ubo_teapot1.color = { 0.49f, 0.06f, 0.22f, 1.0f };
+    glm::mat4 rotate1 = glm::rotate(glm::mat4(1.0f), (float)glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 translate1 = glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, -1.0f, 0.0f));
+    glm::mat4 model1 = translate1 * rotate1;
+    ubo_teapot1.view_proj = view_projection * model1;
+
+    UniformBufferObject ubo_teapot2 = {};
+    ubo_teapot2.color = { 0.0f, 0.13f, 0.31f, 1.0f };
+    glm::mat4 scale2 = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, 1.0f));
+    glm::mat4 translate2 = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 1.0f, 0.0f));
+    glm::mat4 model2 = translate2 * scale2;
+    ubo_teapot2.view_proj = view_projection * model2;
     
-    VkBuffer uniform_buffer = vklCreateHostCoherentBufferWithBackingMemory(
-        sizeof(ubo), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+    VkBuffer uniform_buffer1 = vklCreateHostCoherentBufferWithBackingMemory(
+        sizeof(ubo_teapot1), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
     );
-    vklCopyDataIntoHostCoherentBuffer(uniform_buffer, &ubo, sizeof(ubo));
+    vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_teapot1, sizeof(ubo_teapot1));
+
+    VkBuffer uniform_buffer2 = vklCreateHostCoherentBufferWithBackingMemory(
+        sizeof(ubo_teapot2), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+    );
+    vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
 
     /* --------------------------------------------- */
     // Subtask 2.3: Uniform buffer
@@ -579,6 +594,7 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("Failed to create descriptor pool");
     
     // descriptor set layout
+#pragma region uniform buffer constants
     VkDescriptorSetLayoutBinding layoutBinding = {};
     layoutBinding.binding = 0;
     layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -602,28 +618,51 @@ int main(int argc, char** argv) {
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &descriptorSetLayout;
+#pragma endregion
 
-    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-    VkResult resAllocateDescSets = vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet);
+    VkDescriptorSet descriptorSet1 = VK_NULL_HANDLE;
+    VkResult resAllocateDescSets = vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet1);
     if (resAllocateDescSets != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("Failed to allocate descriptor sets");
 
+    VkDescriptorSet descriptorSet2 = VK_NULL_HANDLE;
+    VkResult resAllocateDescSets2 = vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet2);
+    if (resAllocateDescSets2 != VK_SUCCESS)
+        VKL_EXIT_WITH_ERROR("Failed to allocate descriptor sets");
+
     // write uniform buffer into descriptor set
-    VkDescriptorBufferInfo bufferInfo = {};
-    bufferInfo.buffer = uniform_buffer; 
-    bufferInfo.offset = 0;
-    bufferInfo.range = 4 * sizeof(float);
+    VkDescriptorBufferInfo bufferInfo1 = {};
+    bufferInfo1.buffer = uniform_buffer1; 
+    bufferInfo1.offset = 0;
+    bufferInfo1.range = sizeof(ubo_teapot1);
 
-    VkWriteDescriptorSet write = {};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = descriptorSet;
-    write.dstBinding = 0;
-    write.dstArrayElement = 0;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write.descriptorCount = 1;
-    write.pBufferInfo = &bufferInfo;
+    VkWriteDescriptorSet write1 = {};
+    write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write1.dstSet = descriptorSet1;
+    write1.dstBinding = 0;
+    write1.dstArrayElement = 0;
+    write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write1.descriptorCount = 1;
+    write1.pBufferInfo = &bufferInfo1;
 
-    vkUpdateDescriptorSets(vk_device, 1, &write, 0, nullptr);
+    vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
+
+
+    VkDescriptorBufferInfo bufferInfo2 = {};
+    bufferInfo2.buffer = uniform_buffer2;
+    bufferInfo2.offset = 0;
+    bufferInfo2.range = sizeof(ubo_teapot2);
+
+    VkWriteDescriptorSet write2 = {};
+    write2.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write2.dstSet = descriptorSet2;
+    write2.dstBinding = 0;
+    write2.dstArrayElement = 0;
+    write2.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write2.descriptorCount = 1;
+    write2.pBufferInfo = &bufferInfo2;
+
+    vkUpdateDescriptorSets(vk_device, 1, &write2, 0, nullptr);
 
     VkPipeline vk_pipeline = VK_NULL_HANDLE;
     vk_pipeline = vklCreateGraphicsPipeline(config);
@@ -644,7 +683,8 @@ int main(int argc, char** argv) {
         vklWaitForNextSwapchainImage();
         vklStartRecordingCommands();
         
-        gcgDrawTeapot(vk_pipeline, descriptorSet);
+        gcgDrawTeapot(vk_pipeline, descriptorSet1);
+        gcgDrawTeapot(vk_pipeline, descriptorSet2);
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
@@ -670,7 +710,7 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 1.12: Cleanup
     /* --------------------------------------------- */
-    vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
     vklDestroyGraphicsPipeline(vk_pipeline);
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
