@@ -19,7 +19,7 @@
 constexpr char WELCOME_MSG[] = ":::::: WELCOME TO GCG 2025 ::::::";
 constexpr char WINDOW_TITLE[] = "GCG 2025";
 
-
+#pragma region Helpers
 /* --------------------------------------------- */
 // Helper Function Declarations
 /* --------------------------------------------- */
@@ -79,63 +79,69 @@ VkSurfaceTransformFlagBitsKHR getSurfaceTransform(VkPhysicalDevice physical_devi
  *	This callback function gets invoked by GLFW whenever a GLFW error occured.
  */
 void errorCallbackFromGlfw(int error, const char* description) { std::cout << "GLFW error " << error << ": " << description << std::endl; }
+#pragma endregion
 
 /* --------------------------------------------- */
 // Main
 /* --------------------------------------------- */
 
-
+#pragma region Callbacks
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 
-glm::vec3 YawPitchToDirection(float yaw, float pitch)
+bool left_mouse_btn_pressed = false;
+void mouse_callback(GLFWwindow* window, int button, int action, int mods)
 {
-    // yaw = rotation around Y axis
-    // pitch = rotation around X axis
-    // both in radians
-    glm::vec3 dir;
-    dir.x = cos(pitch) * sin(yaw);
-    dir.y = sin(pitch);
-    dir.z = cos(pitch) * cos(yaw);
-    return glm::normalize(dir);
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        VKL_LOG("Pressed left mouse button");
+        left_mouse_btn_pressed = true;
+    }
+
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+    {
+        VKL_LOG("Released left mouse button");
+        left_mouse_btn_pressed = false;
+    }
 }
 
-int main(int argc, char** argv) {
-    VKL_LOG(WELCOME_MSG);
+float camera_zoom_level = 5.0f;
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    camera_zoom_level += yoffset;
+    //std::cout << "Scrool: " << xoffset << " " << yoffset << std::endl;
+    VKL_LOG(camera_zoom_level);
+}
+#pragma endregion
 
-    CMDLineArgs cmdline_args;
-    gcgParseArgs(cmdline_args, argc, argv);
+float xposPrev = 0;
+float yPosPrev = 0;
+void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, double& current_camera_yaw) {
+    double xpos, ypos;
+    glfwGetCursorPos(window, &xpos, &ypos);
 
-    /* --------------------------------------------- */
-    // Subtask 1.1: Load Settings From File
-    /* --------------------------------------------- */
-    // Window
-    INIReader window_reader("assets/settings/window.ini");
-    int window_width = window_reader.GetInteger("window", "width", 800);
-    int window_height = window_reader.GetInteger("window", "height", 800);
-    bool fullscreen = false;
-    std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
+    if (left_mouse_btn_pressed) {
 
-    /* --------------------------------------------- */
-    // Subtask 2.4: Load Camera Settings From File
-    /* --------------------------------------------- */
-    std::string init_camera_filepath = "assets/settings/camera_front.ini";
-    if (cmdline_args.init_camera)
-        init_camera_filepath = cmdline_args.init_camera_filepath;
-    
-    INIReader camera_reader(init_camera_filepath);
-    double camera_fov = camera_reader.GetReal("camera", "fov", 10);  // not in radians
-    double camera_near = camera_reader.GetReal("camera", "near", 10);
-    double camera_far = camera_reader.GetReal("camera", "far", 20);
-    double camera_yaw = camera_reader.GetReal("camera", "yaw", 10);  // radians
-    double camera_pitch = camera_reader.GetReal("camera", "pitch", 10);  // radians
-    
-    double aspect_ratio = (double) window_width / (double) window_height;
-    
-    // Matrix Work
+        double deltax = xpos - xposPrev;
+        double deltay = ypos - yPosPrev;
+
+        xposPrev = xpos;
+        yPosPrev = ypos;
+
+        current_camera_pitch += deltax;
+        current_camera_yaw += deltay;
+    }
+    else
+    {
+        xposPrev = xpos;
+        yPosPrev = ypos;
+    }
+}
+
+glm::mat4 compute_camera_matrix(float camera_fov, float aspect_ratio, float camera_near, float camera_far, double camera_pitch, double camera_yaw) {
+    // Projection
     glm::mat4 projection_matrix = gcgCreatePerspectiveProjectionMatrix(
         glm::radians(camera_fov),
         aspect_ratio,
@@ -143,9 +149,10 @@ int main(int argc, char** argv) {
         camera_far
     );
 
-    float zoom = 5.0f;
+    // View
     glm::vec3 target(0.0f, 0.0f, 0.0f);
     glm::vec3 global_up(0.0f, 1.0f, 0.0f);
+
     glm::vec3 direction(
         cos(camera_pitch) * sin(camera_yaw),
         sin(camera_pitch),
@@ -153,7 +160,7 @@ int main(int argc, char** argv) {
     );
     direction = glm::normalize(direction);
 
-    glm::vec3 camera_pos = direction * zoom;
+    glm::vec3 camera_pos = -direction * camera_zoom_level;
 
     glm::vec3 forward = glm::normalize(target - camera_pos);
     glm::vec3 right = glm::normalize(glm::cross(global_up, forward));
@@ -170,11 +177,53 @@ int main(int argc, char** argv) {
 
     glm::mat4 view = rotation * translation;
 
-    glm::mat4 view_projection = projection_matrix * view;
+    // Output
+     return projection_matrix * view;
+}
+
+int main(int argc, char** argv) {
+    VKL_LOG(WELCOME_MSG);
+
+    CMDLineArgs cmdline_args;
+    gcgParseArgs(cmdline_args, argc, argv);
+
+#pragma region Window settings
+    /* --------------------------------------------- */
+    // Subtask 1.1: Load Settings From File
+    /* --------------------------------------------- */
+    // Window
+    INIReader window_reader("assets/settings/window.ini");
+    int window_width = window_reader.GetInteger("window", "width", 800);
+    int window_height = window_reader.GetInteger("window", "height", 800);
+    bool fullscreen = false;
+    std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
+#pragma endregion
+
+#pragma region Camera settings
+    /* --------------------------------------------- */
+    // Subtask 2.4: Load Camera Settings From File
+    /* --------------------------------------------- */
+    std::string init_camera_filepath = "assets/settings/camera_front.ini";
+    if (cmdline_args.init_camera)
+        init_camera_filepath = cmdline_args.init_camera_filepath;
+    
+    INIReader camera_reader(init_camera_filepath);
+    double camera_fov = camera_reader.GetReal("camera", "fov", 10);  // not in radians
+    double camera_near = camera_reader.GetReal("camera", "near", 10);
+    double camera_far = camera_reader.GetReal("camera", "far", 20);
+    double camera_yaw = camera_reader.GetReal("camera", "yaw", 10);  // radians
+    double camera_pitch = camera_reader.GetReal("camera", "pitch", 10);  // radians
+    
+    double aspect_ratio = (double) window_width / (double) window_height;
+#pragma endregion
+
+    
+    glm::mat4 view_projection = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw);
 
     // Install a callback function, which gets invoked whenever a GLFW error occurred.
     glfwSetErrorCallback(errorCallbackFromGlfw);
 
+#pragma region GLFW window
     /* --------------------------------------------- */
     // Subtask 1.2: Create a Window with GLFW
     /* --------------------------------------------- */
@@ -202,8 +251,11 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("No GLFW window created.");
     }
     VKL_LOG("Subtask 1.2 done.");
-    
+#pragma endregion
+
     glfwSetKeyCallback(window, key_callback);
+    glfwSetMouseButtonCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
 
 
     VkResult result;
@@ -214,6 +266,7 @@ int main(int argc, char** argv) {
     VkQueue vk_queue = VK_NULL_HANDLE;                    // To be set during Subtask 1.7
     VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;         // To be set during Subtask 1.8
 
+#pragma region Vulkan Instance
     /* --------------------------------------------- */
     // Subtask 1.3: Create a Vulkan Instance
     /* --------------------------------------------- */
@@ -224,8 +277,6 @@ int main(int argc, char** argv) {
     application_info.pApplicationName = "GCG_VK_Solution";
     application_info.applicationVersion = VK_MAKE_API_VERSION(0, 2023, 9, 19);
     application_info.apiVersion = VK_API_VERSION_1_1;            // Your system needs to support this Vulkan API version.
-
-
 
     VkInstanceCreateInfo instance_create_info = {};                      // Zero-initialize every member
     instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO; // Set the struct's type
@@ -305,7 +356,9 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("Function vkCreateInstance failed.");
     }
     VKL_LOG("Subtask 1.3 done.");
+#pragma endregion
 
+#pragma region Vulkan window surface
     /* --------------------------------------------- */
     // Subtask 1.4: Create a Vulkan Window Surface
     /* --------------------------------------------- */
@@ -321,6 +374,7 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("Function glfwCreateWindowSurface failed.");
     }
     VKL_LOG("Subtask 1.4 done.");
+#pragma endregion
 
     /* --------------------------------------------- */
     // Subtask 1.5: Pick a Physical Device
@@ -683,6 +737,10 @@ int main(int argc, char** argv) {
         vklWaitForNextSwapchainImage();
         vklStartRecordingCommands();
         
+        move_camera_when_pressed(window, camera_pitch, camera_yaw);
+        //ubo_teapot1.view_proj = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw);
+        //ubo_teapot2.view_proj = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw);
+
         gcgDrawTeapot(vk_pipeline, descriptorSet1);
         gcgDrawTeapot(vk_pipeline, descriptorSet2);
         
