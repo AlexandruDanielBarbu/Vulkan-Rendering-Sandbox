@@ -111,7 +111,9 @@ float camera_zoom_level = 5.0f;
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     camera_zoom_level -= yoffset;
-    //std::cout << "Scrool: " << xoffset << " " << yoffset << std::endl;
+
+    if (camera_zoom_level < 0)
+        camera_zoom_level = 0;
     VKL_LOG(camera_zoom_level);
 }
 #pragma endregion
@@ -130,7 +132,7 @@ void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, 
         xposPrev = xpos;
         yPosPrev = ypos;
 
-        const double sensitivity = 0.002;
+        const double sensitivity = 0.01;
 
         current_camera_yaw += deltax * sensitivity;
         current_camera_pitch -= deltay * sensitivity;
@@ -544,6 +546,19 @@ int main(int argc, char** argv) {
     // Subtask 1.9: Init GCG Framework
     /* --------------------------------------------- */
 
+    VkClearValue vk_clear_value = {};
+    vk_clear_value.depthStencil.depth = 1.0f;
+    vk_clear_value.depthStencil.stencil = 0;
+
+    VkImage depth_buffer = vklCreateDeviceLocalImageWithBackingMemory(
+        vk_physical_device,
+        vk_device,
+        window_dimensions.width,
+        window_dimensions.height,
+        VK_FORMAT_D32_SFLOAT, // no stencil !!! not for future self
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+    );
+
     // Gather swapchain config as required by the framework:
     VklSwapchainConfig swapchain_config = {};
     swapchain_config.swapchainHandle = vk_swapchain;
@@ -557,10 +572,14 @@ int main(int argc, char** argv) {
         fbuffComp.colorAttachmentImageDetails.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         fbuffComp.colorAttachmentImageDetails.clearValue = {};
         fbuffComp.colorAttachmentImageDetails.clearValue.color = { {0.14f, 0.4f, 0.37f, 1.0f} };
-
-
-        fbuffComp.depthAttachmentImageDetails = {};
+        
+        fbuffComp.depthAttachmentImageDetails.imageHandle = depth_buffer;
+        fbuffComp.depthAttachmentImageDetails.imageFormat = VK_FORMAT_D32_SFLOAT;
+        fbuffComp.depthAttachmentImageDetails.imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        fbuffComp.depthAttachmentImageDetails.clearValue = vk_clear_value;
     }
+    
+
 
     // Init the framework:
     if (!gcgInitFramework(vk_instance, vk_surface, vk_physical_device, vk_device, vk_queue, swapchain_config)) {
