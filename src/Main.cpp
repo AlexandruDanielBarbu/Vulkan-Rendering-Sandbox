@@ -799,10 +799,16 @@ int main(int argc, char** argv) {
     /* --------------------------------------------- */
     // Subtask 1.12: Cleanup
     /* --------------------------------------------- */
-    vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
+    vkDeviceWaitIdle(vk_device);
+
     vklDestroyGraphicsPipeline(vk_pipeline);
+
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
+    
+    vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer2);
+    vklDestroyDeviceLocalImageAndItsBackingMemory(depth_buffer);
     
     gcgDestroyFramework();
     
