@@ -110,7 +110,7 @@ void mouse_callback(GLFWwindow* window, int button, int action, int mods)
 float camera_zoom_level = 5.0f;
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    camera_zoom_level += yoffset;
+    camera_zoom_level -= yoffset;
     //std::cout << "Scrool: " << xoffset << " " << yoffset << std::endl;
     VKL_LOG(camera_zoom_level);
 }
@@ -130,8 +130,13 @@ void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, 
         xposPrev = xpos;
         yPosPrev = ypos;
 
-        current_camera_pitch += deltax;
-        current_camera_yaw += deltay;
+        const double sensitivity = 0.002;
+
+        current_camera_yaw += deltax * sensitivity;
+        current_camera_pitch -= deltay * sensitivity;
+
+        const double pitchLimit = glm::radians(89.0);
+        current_camera_pitch = glm::clamp(current_camera_pitch, -pitchLimit, pitchLimit);
     }
     else
     {
@@ -172,6 +177,7 @@ glm::mat4 compute_camera_matrix(float camera_fov, float aspect_ratio, float came
         glm::vec4(-forward, 0.0f),
         glm::vec4(0, 0, 0, 1)
     );
+    rotation = glm::transpose(rotation);
 
     glm::mat4 translation = glm::translate(glm::mat4(1.0f), -camera_pos);
 
@@ -735,12 +741,18 @@ int main(int argc, char** argv) {
         glfwPollEvents();
 
         vklWaitForNextSwapchainImage();
-        vklStartRecordingCommands();
         
         move_camera_when_pressed(window, camera_pitch, camera_yaw);
-        //ubo_teapot1.view_proj = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw);
-        //ubo_teapot2.view_proj = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw);
+        glm::mat4 proj_viwe = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw);
+        
+        ubo_teapot1.view_proj = proj_viwe * model1;
+        vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_teapot1, sizeof(ubo_teapot1));
 
+        ubo_teapot2.view_proj = proj_viwe * model2;
+        vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
+        
+        vklStartRecordingCommands();
+        
         gcgDrawTeapot(vk_pipeline, descriptorSet1);
         gcgDrawTeapot(vk_pipeline, descriptorSet2);
         
