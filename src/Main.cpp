@@ -591,10 +591,10 @@ int main(int argc, char** argv) {
     // Subtask 2.1: Custom Graphics Pipeline
     /* --------------------------------------------- */
     VklGraphicsPipelineConfig config = {};
-    std::string vertexPath = gcgLoadShaderFilePath("assets\\shader\\testVertex.vert");
+    std::string vertexPath = gcgLoadShaderFilePath("assets/shader/testVertex.vert");
     config.vertexShaderPath = vertexPath.c_str();
     
-    std::string fragPath = gcgLoadShaderFilePath("assets\\shader\\testFrag.frag");
+    std::string fragPath = gcgLoadShaderFilePath("assets/shader/testFrag.frag");
     config.fragmentShaderPath = fragPath.c_str();
     
     config.vertexInputBuffers.resize(1, {});
