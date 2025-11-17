@@ -135,7 +135,7 @@ void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, 
         const double sensitivity = 0.01;
 
         current_camera_yaw += deltax * sensitivity;
-        current_camera_pitch -= deltay * sensitivity;
+        current_camera_pitch += deltay * sensitivity;
 
         const double pitchLimit = glm::radians(89.0);
         current_camera_pitch = glm::clamp(current_camera_pitch, -pitchLimit, pitchLimit);
@@ -162,7 +162,7 @@ glm::mat4 compute_camera_matrix(float camera_fov, float aspect_ratio, float came
 
     glm::vec3 direction(
         cos(camera_pitch) * sin(camera_yaw),
-        sin(camera_pitch),
+        -sin(camera_pitch),
         cos(camera_pitch) * cos(camera_yaw)
     );
     direction = glm::normalize(direction);
