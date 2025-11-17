@@ -93,8 +93,10 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 }
 
 bool left_mouse_btn_pressed = false;
+bool right_mouse_btn_pressed = false;
 void mouse_callback(GLFWwindow* window, int button, int action, int mods)
 {
+    // left mouse press
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         VKL_LOG("Pressed left mouse button");
         left_mouse_btn_pressed = true;
@@ -104,6 +106,18 @@ void mouse_callback(GLFWwindow* window, int button, int action, int mods)
     {
         VKL_LOG("Released left mouse button");
         left_mouse_btn_pressed = false;
+    }
+
+    // right mouse press
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+            VKL_LOG("Pressed right mouse button");
+            right_mouse_btn_pressed = true;
+    }
+
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
+    {
+            VKL_LOG("Released right mouse button");
+            right_mouse_btn_pressed = false;
     }
 }
 
@@ -120,34 +134,54 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 
 float xposPrev = 0;
 float yPosPrev = 0;
-void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, double& current_camera_yaw) {
+bool firstCall = true;
+void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, double& current_camera_yaw,
+        double& deltax, double& deltay) {
     double xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
 
+    if (firstCall) {
+            xposPrev = xpos;
+            yPosPrev = ypos;
+            firstCall = false;
+    }
+
     if (left_mouse_btn_pressed) {
 
-        double deltax = xpos - xposPrev;
-        double deltay = ypos - yPosPrev;
+        double _deltax = xpos - xposPrev;
+        double _deltay = ypos - yPosPrev;
 
         xposPrev = xpos;
         yPosPrev = ypos;
 
         const double sensitivity = 0.01;
-
-        current_camera_yaw += deltax * sensitivity;
-        current_camera_pitch += deltay * sensitivity;
+        current_camera_yaw += _deltax * sensitivity;
+        current_camera_pitch += _deltay * sensitivity;
 
         const double pitchLimit = glm::radians(89.0);
         current_camera_pitch = glm::clamp(current_camera_pitch, -pitchLimit, pitchLimit);
+        
+        deltax = 0;
+        deltay = 0;
+        return;
     }
-    else
-    {
-        xposPrev = xpos;
-        yPosPrev = ypos;
+
+    if (right_mouse_btn_pressed) {
+            deltax = xpos - xposPrev;
+            deltay = ypos - yPosPrev;
+
+            xposPrev = xpos;
+            yPosPrev = ypos;
+
+            return;
     }
+ 
+    deltax = 0.0;
+    deltay = 0.0;
 }
 
-glm::mat4 compute_camera_matrix(float camera_fov, float aspect_ratio, float camera_near, float camera_far, double camera_pitch, double camera_yaw) {
+glm::mat4 compute_camera_matrix(const  float camera_fov, const  float aspect_ratio, const float camera_near, const float camera_far, const double camera_pitch, const double camera_yaw,
+        const double deltax, const double deltay) {
     // Projection
     glm::mat4 projection_matrix = gcgCreatePerspectiveProjectionMatrix(
         glm::radians(camera_fov),
@@ -167,11 +201,31 @@ glm::mat4 compute_camera_matrix(float camera_fov, float aspect_ratio, float came
     );
     direction = glm::normalize(direction);
 
-    glm::vec3 camera_pos = -direction * camera_zoom_level;
+    std::cout << deltax << " " << deltay << std::endl;
 
-    glm::vec3 forward = glm::normalize(target - camera_pos);
+    glm::vec3 camera_pos = target - direction * camera_zoom_level;
+
+    glm::vec3 forward;
+    if (right_mouse_btn_pressed) {
+            // Strafe
+            forward = direction;
+    }
+    else {
+            // arcball
+            forward = glm::normalize(target - camera_pos);
+    }
+
+
     glm::vec3 right = glm::normalize(glm::cross(global_up, forward));
     glm::vec3 up = glm::cross(forward, right);
+
+    // strafe
+    const float strafe_speed = 1.01f;
+    target += (-(float)deltax * strafe_speed) * right;
+    target += ((float)deltay * strafe_speed) * up;
+
+    camera_pos = target - forward * camera_zoom_level;
+
 
     glm::mat4 rotation = glm::mat4(
         glm::vec4(right, 0.0f),
@@ -226,7 +280,7 @@ int main(int argc, char** argv) {
 #pragma endregion
 
     
-    glm::mat4 view_projection = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw);
+    glm::mat4 view_projection = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw, 0.0, 0.0);
 
     // Install a callback function, which gets invoked whenever a GLFW error occurred.
     glfwSetErrorCallback(errorCallbackFromGlfw);
@@ -761,8 +815,9 @@ int main(int argc, char** argv) {
 
         vklWaitForNextSwapchainImage();
         
-        move_camera_when_pressed(window, camera_pitch, camera_yaw);
-        glm::mat4 proj_viwe = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw);
+        double deltax{}, deltay{};
+        move_camera_when_pressed(window, camera_pitch, camera_yaw, deltax, deltay);
+        glm::mat4 proj_viwe = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw, deltax, deltay);
         
         ubo_teapot1.view_proj = proj_viwe * model1;
         vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_teapot1, sizeof(ubo_teapot1));
