@@ -134,17 +134,10 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 
 float xposPrev = 0;
 float yPosPrev = 0;
-bool firstCall = true;
 void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, double& current_camera_yaw,
         double& deltax, double& deltay) {
     double xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
-
-    if (firstCall) {
-            xposPrev = xpos;
-            yPosPrev = ypos;
-            firstCall = false;
-    }
 
     if (left_mouse_btn_pressed) {
 
@@ -155,8 +148,8 @@ void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, 
         yPosPrev = ypos;
 
         const double sensitivity = 0.01;
-        current_camera_yaw += _deltax * sensitivity;
-        current_camera_pitch += _deltay * sensitivity;
+        current_camera_yaw -= _deltax * sensitivity;
+        current_camera_pitch -= _deltay * sensitivity;
 
         const double pitchLimit = glm::radians(89.0);
         current_camera_pitch = glm::clamp(current_camera_pitch, -pitchLimit, pitchLimit);
@@ -176,14 +169,41 @@ void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, 
             return;
     }
  
+    xposPrev = xpos;
+    yPosPrev = ypos;
+
     deltax = 0.0;
     deltay = 0.0;
+}
+
+glm::vec3 target(0.0f, 0.0f, 0.0f);
+glm::vec3 camera_pos(0.0f, 0.0f, -5.0f);
+glm::mat4 myLookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec3& up = { 0.0f, 1.0f, 0.0f }) {
+        glm::vec3 camera_forward = glm::normalize(eye - target);
+        glm::vec3 camera_right = glm::normalize(glm::cross(up, camera_forward));
+        glm::vec3 camera_up = glm::cross(camera_forward, camera_right);
+
+        glm::mat4 orientation(
+                glm::vec4(camera_right.x, camera_up.x, camera_forward.x, 0),
+                glm::vec4(camera_right.y, camera_up.y, camera_forward.y, 0),
+                glm::vec4(camera_right.z, camera_up.z, camera_forward.z, 0),
+                glm::vec4(0, 0, 0, 1)
+        );
+
+        glm::mat4 translation(
+                glm::vec4(1, 0, 0, 0),
+                glm::vec4(0, 1, 0, 0),
+                glm::vec4(0, 0, 1, 0),
+                glm::vec4(-eye.x, -eye.y, -eye.z, 1)
+        );
+
+        return (orientation * translation);
 }
 
 glm::mat4 compute_camera_matrix(const  float camera_fov, const  float aspect_ratio, const float camera_near, const float camera_far, const double camera_pitch, const double camera_yaw,
         const double deltax, const double deltay) {
     // Projection
-    glm::mat4 projection_matrix = gcgCreatePerspectiveProjectionMatrix(
+    glm::mat4 projection = gcgCreatePerspectiveProjectionMatrix(
         glm::radians(camera_fov),
         aspect_ratio,
         camera_near,
@@ -191,56 +211,18 @@ glm::mat4 compute_camera_matrix(const  float camera_fov, const  float aspect_rat
     );
 
     // View
-    glm::vec3 target(0.0f, 0.0f, 0.0f);
-    glm::vec3 global_up(0.0f, 1.0f, 0.0f);
-
-    glm::vec3 direction(
+    glm::vec3 direction = glm::normalize(glm::vec3(
         cos(camera_pitch) * sin(camera_yaw),
         -sin(camera_pitch),
         cos(camera_pitch) * cos(camera_yaw)
-    );
-    direction = glm::normalize(direction);
+    ));
 
-    std::cout << deltax << " " << deltay << std::endl;
+    camera_pos = direction * camera_zoom_level;
 
-    glm::vec3 camera_pos = target - direction * camera_zoom_level;
-
-    glm::vec3 forward;
-    if (right_mouse_btn_pressed) {
-            // Strafe
-            forward = direction;
-    }
-    else {
-            // arcball
-            forward = glm::normalize(target - camera_pos);
-    }
-
-
-    glm::vec3 right = glm::normalize(glm::cross(global_up, forward));
-    glm::vec3 up = glm::cross(forward, right);
-
-    // strafe
-    const float strafe_speed = 1.01f;
-    target += (-(float)deltax * strafe_speed) * right;
-    target += ((float)deltay * strafe_speed) * up;
-
-    camera_pos = target - forward * camera_zoom_level;
-
-
-    glm::mat4 rotation = glm::mat4(
-        glm::vec4(right, 0.0f),
-        glm::vec4(up, 0.0f),
-        glm::vec4(-forward, 0.0f),
-        glm::vec4(0, 0, 0, 1)
-    );
-    rotation = glm::transpose(rotation);
-
-    glm::mat4 translation = glm::translate(glm::mat4(1.0f), -camera_pos);
-
-    glm::mat4 view = rotation * translation;
-
+    glm::mat4 view = myLookAt(camera_pos, target);
+    
     // Output
-     return projection_matrix * view;
+     return projection * view;
 }
 
 int main(int argc, char** argv) {
