@@ -141,145 +141,40 @@ VkPhysicalDevice trySelectFirstDiscreteGPU(const std::vector<VkPhysicalDevice>& 
         return devices[0];
 }
 
-
 float xposPrev = 0;
 float yPosPrev = 0;
-void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, double& current_camera_yaw,
-        double& deltax, double& deltay) {
+void get_mouse_delta(GLFWwindow* window, double& deltax, double& deltay) {
+    // get current mouse position
     double xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
 
-    if (left_mouse_btn_pressed) {
+    // if i want to move camera compute deltas
+    if (left_mouse_btn_pressed || right_mouse_btn_pressed) {
+        // write deltas
+        deltax = xpos - xposPrev;
+        deltay = ypos - yPosPrev;
 
-        double _deltax = xpos - xposPrev;
-        double _deltay = ypos - yPosPrev;
-
+        std::cout << '(' << deltax << ' ' << deltay << ')' << std::endl;
+        // update previous mouse positions
         xposPrev = xpos;
         yPosPrev = ypos;
 
-        const double sensitivity = 0.01;
-        current_camera_yaw -= _deltax * sensitivity;
-        current_camera_pitch -= _deltay * sensitivity;
-
-        const double pitchLimit = glm::radians(89.0);
-        current_camera_pitch = glm::clamp(current_camera_pitch, -pitchLimit, pitchLimit);
-        
-        deltax = 0;
-        deltay = 0;
         return;
     }
-
-    if (right_mouse_btn_pressed) {
-            deltax = xpos - xposPrev;
-            deltay = ypos - yPosPrev;
-
-            xposPrev = xpos;
-            yPosPrev = ypos;
-
-            return;
-    }
- 
+    
+    // Otherwise do nothing
     xposPrev = xpos;
     yPosPrev = ypos;
 
     deltax = 0.0;
     deltay = 0.0;
 }
-
-glm::vec3 target(0.0f, 0.0f, 0.0f);
-glm::vec3 camera_pos(0.0f, 0.0f, -5.0f);
-glm::vec3 last_camera_forward(0.0f, 0.0f, 0.0f);
-glm::vec3 last_camera_right(0.0f, 0.0f, 0.0f);
-glm::vec3 last_camera_up(0.0f, 0.0f, 0.0f);
-
-glm::mat4 myLookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec3& up = { 0.0f, 1.0f, 0.0f }) {
-        glm::vec3 camera_forward = glm::normalize(eye - target);
-        glm::vec3 camera_right = glm::normalize(glm::cross(up, camera_forward));
-        glm::vec3 camera_up = glm::cross(camera_forward, camera_right);
-
-        glm::mat4 orientation(
-                glm::vec4(camera_right.x, camera_up.x, camera_forward.x, 0),
-                glm::vec4(camera_right.y, camera_up.y, camera_forward.y, 0),
-                glm::vec4(camera_right.z, camera_up.z, camera_forward.z, 0),
-                glm::vec4(0, 0, 0, 1)
-        );
-
-        glm::mat4 translation(
-                glm::vec4(1, 0, 0, 0),
-                glm::vec4(0, 1, 0, 0),
-                glm::vec4(0, 0, 1, 0),
-                glm::vec4(-eye.x, -eye.y, -eye.z, 1)
-        );
-
-        last_camera_forward = camera_forward;
-        last_camera_right = camera_right;
-        last_camera_up = camera_up;
-
-        return (orientation * translation);
-}
-
-glm::mat4 initial_compute_camera_matrix(const  float camera_fov, const  float aspect_ratio, const float camera_near, const float camera_far, const double camera_pitch, const double camera_yaw,
-        const double deltax, const double deltay) {
-        // Projection
-        //glm::mat4 projection = gcgCreatePerspectiveProjectionMatrix(
-        //        glm::radians(camera_fov),
-        //        aspect_ratio,
-        //        camera_near,
-        //        camera_far
-        //);
-
-        // View
-        //glm::vec3 direction = glm::normalize(glm::vec3(
-        //        cos(camera_pitch) * sin(camera_yaw),
-        //        -sin(camera_pitch),
-        //        cos(camera_pitch) * cos(camera_yaw)
-        //));
-
-        //camera_pos = direction * camera_zoom_level;
-
-        //glm::mat4 view = myLookAt(camera_pos, target);
-
-        // Output
-        //return projection * view;
-}
-
-glm::mat4 compute_camera_matrix(const  float camera_fov, const  float aspect_ratio, const float camera_near, const float camera_far, const double camera_pitch, const double camera_yaw,
-        const double deltax, const double deltay) {
-
-        // Projection
-        glm::mat4 projection = gcgCreatePerspectiveProjectionMatrix(
-                glm::radians(camera_fov),
-                aspect_ratio,
-                camera_near,
-                camera_far
-        );
-
-
-        // View
-        glm::vec3 direction = glm::normalize(glm::vec3(
-                cos(camera_pitch) * sin(camera_yaw),
-                -sin(camera_pitch),
-                cos(camera_pitch) * cos(camera_yaw)
-        ));
-
-        camera_pos = direction * camera_zoom_level;
-
-        glm::mat4 view = myLookAt(camera_pos, target);
-    
-
-        if (right_mouse_btn_pressed) {
-                // strafe
-        }
-
-        // Output
-        return projection * view;
-}
 #pragma endregion
 
 #pragma region Camera class
 class Camera {
 public:
-        Camera(const std::string ini_file_path, const double window_width, const double window_height) {
+        Camera(const std::string& ini_file_path, const double window_width, const double window_height) {
                 INIReader camera_reader(ini_file_path);
                 camera_fov   = camera_reader.GetReal("camera", "fov",   10);    // not in radians
                 camera_near  = camera_reader.GetReal("camera", "near",  10);
@@ -295,16 +190,35 @@ public:
                         camera_far
                 );
 
-                // adjust projection to vulkan unit cube
-                proj[1][1] *= -1.0f;
+                compute_camera_pos();
+        }
 
-                camera_pos = target + camera_zoom_level * glm::normalize(glm::vec3(
-                        cos(camera_pitch) * sin(camera_yaw),
-                        sin(camera_pitch),
-                        cos(camera_pitch) * cos(camera_yaw)
-                ));
+        glm::mat4 get_proj_view_matrix(const double deltax = 0, const double deltay = 0) {
+                // arcball
+                if (left_mouse_btn_pressed) {
+                        camera_yaw -= deltax * arcball_sensitivity;
+                        camera_pitch += deltay * arcball_sensitivity;
+
+                        const double pitchLimit = glm::radians(89.0);
+                        camera_pitch = glm::clamp(camera_pitch, -pitchLimit, pitchLimit);
+
+                        compute_camera_pos();
+                        //force return, my job here is done
+                        return proj * myLookAt();
+                }
+
+                if (right_mouse_btn_pressed) {
+                        //return my strafe thing
+                        return proj * myLookAt();
+                }
+
+                // else rerturrn what is there
+                return proj * myLookAt();
         }
 private:
+        const double arcball_sensitivity = 0.01;
+        const double strafe_sensitivity = 0.01;
+
         double camera_fov = 0;
         double camera_near = 0;
         double camera_far = 0;
@@ -313,13 +227,20 @@ private:
         double camera_yaw = 0;
         double camera_pitch = 0;
         
-        float camera_zoom_level = 0;
+        float camera_zoom_level = 5.0;
         
         glm::mat4 proj = {};
         
         glm::vec3 target = {};
         glm::vec3 camera_pos = { 0.0f, 0.0f, -5.0f };
         
+        void compute_camera_pos() {
+                camera_pos = target + camera_zoom_level * glm::normalize(glm::vec3(
+                        cos(camera_pitch) * sin(camera_yaw),
+                        sin(camera_pitch),
+                        cos(camera_pitch) * cos(camera_yaw)
+                ));
+        }
         glm::mat4 myLookAt() const {
                 glm::vec3 up = { 0.0f, 1.0f, 0.0f };
 
@@ -342,10 +263,7 @@ private:
                 );
                 
                 return (orientation * translation);
-        }
-
-        glm::mat4 get_proj_view_matrix() {
-                return proj * myLookAt();
+                //return glm::lookAt(camera_pos, target, up);
         }
 };
 #pragma endregion
@@ -370,18 +288,11 @@ int main(int argc, char** argv) {
     if (cmdline_args.init_camera)
         init_camera_filepath = cmdline_args.init_camera_filepath;
     
-    INIReader camera_reader(init_camera_filepath);
-    double camera_fov = camera_reader.GetReal("camera", "fov", 10);  // not in radians
-    double camera_near = camera_reader.GetReal("camera", "near", 10);
-    double camera_far = camera_reader.GetReal("camera", "far", 20);
-    double camera_yaw = camera_reader.GetReal("camera", "yaw", 10);  // radians
-    double camera_pitch = camera_reader.GetReal("camera", "pitch", 10);  // radians
-    
-    double aspect_ratio = (double) window_width / (double) window_height;
+    Camera main_camera(init_camera_filepath, window_width, window_height);
 #pragma endregion
 
     
-    glm::mat4 view_projection = initial_compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw, 0.0, 0.0);
+    glm::mat4 view_projection = main_camera.get_proj_view_matrix();
 
     // Install a callback function, which gets invoked whenever a GLFW error occurred.
     glfwSetErrorCallback(errorCallbackFromGlfw);
@@ -838,14 +749,15 @@ int main(int argc, char** argv) {
 
         vklWaitForNextSwapchainImage();
         
-        double deltax{}, deltay{};
-        move_camera_when_pressed(window, camera_pitch, camera_yaw, deltax, deltay);
-        glm::mat4 proj_viwe = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw, deltax, deltay);
+        double deltax = {};
+        double deltay = {};
+        get_mouse_delta(window, deltax, deltay);
+        glm::mat4 proj_view = main_camera.get_proj_view_matrix(deltax, deltay);
         
-        ubo_teapot1.view_proj = proj_viwe * model1;
+        ubo_teapot1.view_proj = proj_view * model1;
         vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_teapot1, sizeof(ubo_teapot1));
 
-        ubo_teapot2.view_proj = proj_viwe * model2;
+        ubo_teapot2.view_proj = proj_view * model2;
         vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
         
         vklStartRecordingCommands();
