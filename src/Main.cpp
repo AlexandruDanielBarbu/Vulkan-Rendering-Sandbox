@@ -19,11 +19,7 @@
 constexpr char WELCOME_MSG[] = ":::::: WELCOME TO GCG 2025 ::::::";
 constexpr char WINDOW_TITLE[] = "GCG 2025";
 
-#pragma region Helpers
-/* --------------------------------------------- */
-// Helper Function Declarations
-/* --------------------------------------------- */
-
+#pragma region Helper Function Declarations
 /*!
  *	From the given list of physical devices, select the first one that satisfies all requirements.
  *	@param		physical_devices		A pointer which points to contiguous memory of #physical_device_count sequentially
@@ -81,11 +77,7 @@ VkSurfaceTransformFlagBitsKHR getSurfaceTransform(VkPhysicalDevice physical_devi
 void errorCallbackFromGlfw(int error, const char* description) { std::cout << "GLFW error " << error << ": " << description << std::endl; }
 #pragma endregion
 
-/* --------------------------------------------- */
-// Main
-/* --------------------------------------------- */
-
-#pragma region Callbacks
+#pragma region alexd custom callbacks
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
@@ -131,6 +123,23 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
     VKL_LOG(camera_zoom_level);
 }
 #pragma endregion
+
+#pragma region alexd custom helpers
+// If a discrete gpu is found return it, else return the first device
+VkPhysicalDevice trySelectFirstDiscreteGPU(const std::vector<VkPhysicalDevice>& devices) {
+
+        for (const auto& device : devices) {
+                VkPhysicalDeviceProperties properties;
+                vkGetPhysicalDeviceProperties(device, &properties);
+
+                if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+                        return device;
+        }
+
+        VKL_LOG("Falling back to first device");
+        return devices[0];
+}
+
 
 float xposPrev = 0;
 float yPosPrev = 0;
@@ -178,6 +187,10 @@ void move_camera_when_pressed(GLFWwindow* window, double& current_camera_pitch, 
 
 glm::vec3 target(0.0f, 0.0f, 0.0f);
 glm::vec3 camera_pos(0.0f, 0.0f, -5.0f);
+glm::vec3 last_camera_forward(0.0f, 0.0f, 0.0f);
+glm::vec3 last_camera_right(0.0f, 0.0f, 0.0f);
+glm::vec3 last_camera_up(0.0f, 0.0f, 0.0f);
+
 glm::mat4 myLookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec3& up = { 0.0f, 1.0f, 0.0f }) {
         glm::vec3 camera_forward = glm::normalize(eye - target);
         glm::vec3 camera_right = glm::normalize(glm::cross(up, camera_forward));
@@ -197,33 +210,70 @@ glm::mat4 myLookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec
                 glm::vec4(-eye.x, -eye.y, -eye.z, 1)
         );
 
+        last_camera_forward = camera_forward;
+        last_camera_right = camera_right;
+        last_camera_up = camera_up;
+
         return (orientation * translation);
+}
+
+glm::mat4 initial_compute_camera_matrix(const  float camera_fov, const  float aspect_ratio, const float camera_near, const float camera_far, const double camera_pitch, const double camera_yaw,
+        const double deltax, const double deltay) {
+        // Projection
+        glm::mat4 projection = gcgCreatePerspectiveProjectionMatrix(
+                glm::radians(camera_fov),
+                aspect_ratio,
+                camera_near,
+                camera_far
+        );
+
+        // View
+        glm::vec3 direction = glm::normalize(glm::vec3(
+                cos(camera_pitch) * sin(camera_yaw),
+                -sin(camera_pitch),
+                cos(camera_pitch) * cos(camera_yaw)
+        ));
+
+        camera_pos = direction * camera_zoom_level;
+
+        glm::mat4 view = myLookAt(camera_pos, target);
+
+        // Output
+        return projection * view;
 }
 
 glm::mat4 compute_camera_matrix(const  float camera_fov, const  float aspect_ratio, const float camera_near, const float camera_far, const double camera_pitch, const double camera_yaw,
         const double deltax, const double deltay) {
-    // Projection
-    glm::mat4 projection = gcgCreatePerspectiveProjectionMatrix(
-        glm::radians(camera_fov),
-        aspect_ratio,
-        camera_near,
-        camera_far
-    );
 
-    // View
-    glm::vec3 direction = glm::normalize(glm::vec3(
-        cos(camera_pitch) * sin(camera_yaw),
-        -sin(camera_pitch),
-        cos(camera_pitch) * cos(camera_yaw)
-    ));
+        // Projection
+        glm::mat4 projection = gcgCreatePerspectiveProjectionMatrix(
+                glm::radians(camera_fov),
+                aspect_ratio,
+                camera_near,
+                camera_far
+        );
 
-    camera_pos = direction * camera_zoom_level;
 
-    glm::mat4 view = myLookAt(camera_pos, target);
+        // View
+        glm::vec3 direction = glm::normalize(glm::vec3(
+                cos(camera_pitch) * sin(camera_yaw),
+                -sin(camera_pitch),
+                cos(camera_pitch) * cos(camera_yaw)
+        ));
+
+        camera_pos = direction * camera_zoom_level;
+
+        glm::mat4 view = myLookAt(camera_pos, target);
     
-    // Output
-     return projection * view;
+
+        if (right_mouse_btn_pressed) {
+                // strafe
+        }
+
+        // Output
+        return projection * view;
 }
+#pragma endregion
 
 int main(int argc, char** argv) {
     VKL_LOG(WELCOME_MSG);
@@ -231,11 +281,7 @@ int main(int argc, char** argv) {
     CMDLineArgs cmdline_args;
     gcgParseArgs(cmdline_args, argc, argv);
 
-#pragma region Window settings
-    /* --------------------------------------------- */
-    // Subtask 1.1: Load Settings From File
-    /* --------------------------------------------- */
-    // Window
+#pragma region load window settings
     INIReader window_reader("assets/settings/window.ini");
     int window_width = window_reader.GetInteger("window", "width", 800);
     int window_height = window_reader.GetInteger("window", "height", 800);
@@ -243,10 +289,8 @@ int main(int argc, char** argv) {
     std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
 #pragma endregion
 
-#pragma region Camera settings
-    /* --------------------------------------------- */
-    // Subtask 2.4: Load Camera Settings From File
-    /* --------------------------------------------- */
+#pragma region load camera settings
+    // GCG framework stuff
     std::string init_camera_filepath = "assets/settings/camera_front.ini";
     if (cmdline_args.init_camera)
         init_camera_filepath = cmdline_args.init_camera_filepath;
@@ -262,21 +306,18 @@ int main(int argc, char** argv) {
 #pragma endregion
 
     
-    glm::mat4 view_projection = compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw, 0.0, 0.0);
+    glm::mat4 view_projection = initial_compute_camera_matrix(camera_fov, aspect_ratio, camera_near, camera_far, camera_pitch, camera_yaw, 0.0, 0.0);
 
     // Install a callback function, which gets invoked whenever a GLFW error occurred.
     glfwSetErrorCallback(errorCallbackFromGlfw);
 
-#pragma region GLFW window
-    /* --------------------------------------------- */
-    // Subtask 1.2: Create a Window with GLFW
-    /* --------------------------------------------- */
+#pragma region GLFW window setup
     if (!glfwInit()) {
         VKL_EXIT_WITH_ERROR("Failed to init GLFW");
     }
 
     // below line deactivates some OpenGl/OpenGl SE stuff
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // No need to create a graphics context for Vulkan
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     // Use a monitor if we'd like to open the window in fullscreen mode:
@@ -286,22 +327,17 @@ int main(int argc, char** argv) {
     }
 
     // Get a valid window handle and assign to window
-    // Note that i used the above mentioned variable called monitor.
     GLFWwindow* window = glfwCreateWindow(window_width, window_height, window_title.c_str(), monitor, nullptr);
     if (!window) {
-        VKL_LOG("If your program reaches this point, that means two things:");
-        VKL_LOG("1) Project setup was successful. Everything is working fine.");
-        VKL_LOG("2) You haven't implemented Subtask 1.2, which is creating a window with GLFW.");
         VKL_EXIT_WITH_ERROR("No GLFW window created.");
     }
-    VKL_LOG("Subtask 1.2 done.");
 #pragma endregion
 
     glfwSetKeyCallback(window, key_callback);
     glfwSetMouseButtonCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-
+#pragma region my vulkan related variables
     VkResult result;
     VkInstance vk_instance = VK_NULL_HANDLE;              // To be set during Subtask 1.3
     VkSurfaceKHR vk_surface = VK_NULL_HANDLE;             // To be set during Subtask 1.4
@@ -309,24 +345,25 @@ int main(int argc, char** argv) {
     VkDevice vk_device = VK_NULL_HANDLE;                  // To be set during Subtask 1.7
     VkQueue vk_queue = VK_NULL_HANDLE;                    // To be set during Subtask 1.7
     VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;         // To be set during Subtask 1.8
+#pragma endregion
 
-#pragma region Vulkan Instance
-    /* --------------------------------------------- */
-    // Subtask 1.3: Create a Vulkan Instance
-    /* --------------------------------------------- */
-    VkApplicationInfo application_info = {};                     // Zero-initialize every member
-    application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO; // Set this struct instance's type
-    application_info.pEngineName = "GCG_VK_Library";             // Set some properties...
+#pragma region vulkan instance
+
+#pragma region vk application info
+    VkApplicationInfo application_info = {};                     
+    application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO; 
+    application_info.pEngineName = "GCG_VK_Library";             
     application_info.engineVersion = VK_MAKE_API_VERSION(0, 2023, 9, 1);
     application_info.pApplicationName = "GCG_VK_Solution";
     application_info.applicationVersion = VK_MAKE_API_VERSION(0, 2023, 9, 19);
-    application_info.apiVersion = VK_API_VERSION_1_1;            // Your system needs to support this Vulkan API version.
+    application_info.apiVersion = VK_API_VERSION_1_1;  
+#pragma endregion
 
-    VkInstanceCreateInfo instance_create_info = {};                      // Zero-initialize every member
-    instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO; // Set the struct's type
+    VkInstanceCreateInfo instance_create_info = {};                      
+    instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO; 
     instance_create_info.pApplicationInfo = &application_info;
 
-    // Get required glfw extensions
+#pragma region GLFW required extensions
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
@@ -336,24 +373,25 @@ int main(int argc, char** argv) {
 
     std::vector<const char*> instance_extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
     instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#pragma endregion
     
-    // Get all supported extensions
+#pragma region supported extensions
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
     
     std::vector<VkExtensionProperties> extensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+#pragma endregion
 
     // Query if i support all extensions
-    for (int i = 0; i < glfwExtensionCount; i++) {
+    for (const auto& glfwExtension : instance_extensions) {
         bool isFound = false;
         for (const auto& extension : extensions) {
-            if (strcmp(glfwExtensions[i], extension.extensionName) == 0) {
+            if (strcmp(glfwExtension, extension.extensionName) == 0) {
                 isFound = true;
                 break;
             }
         }
-
         if (!isFound)
             VKL_EXIT_WITH_ERROR("One extension was not found.");
     }
@@ -367,10 +405,10 @@ int main(int argc, char** argv) {
     const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
     instance_create_info.ppEnabledLayerNames = layers;
     
-    // Get supported Layer count
+    // Get supported Layers
     uint32_t layerCount = 0;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-    // Get the layer names
+    
     std::vector<VkLayerProperties> availableLayers(layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
@@ -388,48 +426,26 @@ int main(int argc, char** argv) {
             VKL_EXIT_WITH_ERROR("One layer was not found.");
     }
     
-    // Use vkCreateInstance to create a vulkan instance handle! Assign it to vk_instance!
-    //glfwExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-
-    VkResult errCreateInstance = vkCreateInstance(&instance_create_info, nullptr, &vk_instance);
-    
-    if (!vk_instance) {
-        VKL_EXIT_WITH_ERROR("No VkInstance created or handle not assigned.");
-    }
-    if (errCreateInstance != VK_SUCCESS) {
+    if (vkCreateInstance(&instance_create_info, nullptr, &vk_instance) != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("Function vkCreateInstance failed.");
-    }
-    VKL_LOG("Subtask 1.3 done.");
-#pragma endregion
-
-#pragma region Vulkan window surface
-    /* --------------------------------------------- */
-    // Subtask 1.4: Create a Vulkan Window Surface
-    /* --------------------------------------------- */
-    // Use glfwCreateWindowSurface to create a window surface! Assign its handle to vk_surface!
     
-    VkResult errSurface = glfwCreateWindowSurface(vk_instance, window, nullptr, &vk_surface);
-
-    if (!vk_surface) {
-        VKL_EXIT_WITH_ERROR("No VkSurfaceKHR created or handle not assigned.");
-    }
-    if (errSurface != VK_SUCCESS)
-    {
-        VKL_EXIT_WITH_ERROR("Function glfwCreateWindowSurface failed.");
-    }
-    VKL_LOG("Subtask 1.4 done.");
+    if (!vk_instance)
+        VKL_EXIT_WITH_ERROR("No VkInstance created or handle not assigned.");
 #pragma endregion
 
-    /* --------------------------------------------- */
-    // Subtask 1.5: Pick a Physical Device
-    /* --------------------------------------------- */
-    // Use vkEnumeratePhysicalDevices get all the available physical device handles!
-    // Select one that is suitable using the helper function selectPhysicalDeviceIndex and assign it to vk_physical_device!
+#pragma region vulkan window surface
+    if (glfwCreateWindowSurface(vk_instance, window, nullptr, &vk_surface) != VK_SUCCESS)
+        VKL_EXIT_WITH_ERROR("Function glfwCreateWindowSurface failed.");
 
-    // Get number of devices
+    if (!vk_surface)
+        VKL_EXIT_WITH_ERROR("No VkSurfaceKHR created or handle not assigned.");
+#pragma endregion
+
+#pragma region vulkan physical device
+    // Get devices
     uint32_t physicalDeviceCount = 0;
     vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, nullptr);
-    // Get devices in an array
+    
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
     vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, physicalDevices.data());
 
@@ -452,36 +468,21 @@ int main(int argc, char** argv) {
         VKL_LOG(std::string(properties.deviceName));
     }
 
-    if (!vk_physical_device) {
+    if (!vk_physical_device)
         VKL_EXIT_WITH_ERROR("No VkPhysicalDevice selected or handle not assigned.");
-    }
-    VKL_LOG("Subtask 1.5 done.");
+#pragma endregion
 
-    /* --------------------------------------------- */
-    // Subtask 1.6: Select a Queue Family
-    /* --------------------------------------------- */
-    // Find a suitable queue family and assign its index to the following variable:
-    //      Hint: Use the function selectQueueFamilyIndex, but complete its implementation first!
+#pragma region vulkan queue family
     uint32_t selected_queue_family_index = selectQueueFamilyIndex(vk_physical_device, vk_surface);
 
     // Sanity check if we have selected a valid queue family index:
     uint32_t queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nullptr);
-    if (selected_queue_family_index >= queue_family_count) {
+    if (selected_queue_family_index >= queue_family_count)
         VKL_EXIT_WITH_ERROR("Invalid queue family index selected.");
-    }
-    VKL_LOG("Subtask 1.6 done.");
+#pragma endregion
 
-    /* --------------------------------------------- */
-    // Subtask 1.7: Create a Logical Device and Get Queue
-    /* --------------------------------------------- */
-    // TODOs: [x] Create an instance of VkDeviceCreateInfo and use it to create one queue!
-    //        [x] Hook in the address of the VkDeviceQueueCreateInfo instance at the right place!
-    //        [x] Use VkDeviceCreateInfo::enabledExtensionCount and VkDeviceCreateInfo::ppEnabledExtensionNames
-    //            to enable the VK_KHR_SWAPCHAIN_EXTENSION_NAME device extension!
-    //        [x] Ensure that the other settings (which are unused in our case) are zero-initialized!
-    //        [x] Finally, use vkCreateDevice to create the device and assign its handle to vk_device!
-
+#pragma region logical device and get queue
     VkDeviceQueueCreateInfo vk_device_queue_create_info = {};
     vk_device_queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     vk_device_queue_create_info.queueFamilyIndex = selected_queue_family_index;
@@ -499,30 +500,22 @@ int main(int argc, char** argv) {
     };
     vk_device_create_info.ppEnabledExtensionNames = device_extensions;
 
-    VkResult resVkDevice = vkCreateDevice(vk_physical_device, &vk_device_create_info, nullptr, &vk_device);
-
-    if (!vk_device) {
-        VKL_EXIT_WITH_ERROR("No VkDevice created or handle not assigned.");
-    }
-    if (resVkDevice != VK_SUCCESS) {
+    if (vkCreateDevice(vk_physical_device, &vk_device_create_info, nullptr, &vk_device) != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("Something bad happened to vk_device.");
 
-    }
-    // After device creation, use vkGetDeviceQueue to get the one and only created queue!
-    // Assign its handle to vk_queue!
+    if (!vk_device)
+        VKL_EXIT_WITH_ERROR("No VkDevice created or handle not assigned.");
 
     vkGetDeviceQueue(vk_device, selected_queue_family_index, 0, &vk_queue);
-    if (!vk_queue) {
+    if (!vk_queue)
         VKL_EXIT_WITH_ERROR("No VkQueue selected or handle not assigned.");
-    }
-    VKL_LOG("Subtask 1.7 done.");
+#pragma endregion
 
-    /* --------------------------------------------- */
-    // Subtask 1.8: Create a Swapchain
-    /* --------------------------------------------- */
+#pragma region swapchain
     uint32_t queueFamilyIndexCount = 0u;
     std::vector<uint32_t> queueFamilyIndices;
     VkSurfaceCapabilitiesKHR surface_capabilities = getPhysicalDeviceSurfaceCapabilities(vk_physical_device, vk_surface);
+    
     // Build the swapchain config struct:
     VkSwapchainCreateInfoKHR swapchain_create_info = {};
     swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -539,14 +532,6 @@ int main(int argc, char** argv) {
     swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swapchain_create_info.clipped = VK_TRUE;
     swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    // TODO: Provide values for:
-    //        [x] VkSwapchainCreateInfoKHR::queueFamilyIndexCount
-    //        [x] VkSwapchainCreateInfoKHR::pQueueFamilyIndices
-    //        [x] VkSwapchainCreateInfoKHR::imageFormat
-    //        [x] VkSwapchainCreateInfoKHR::imageColorSpace
-    //        [x] VkSwapchainCreateInfoKHR::imageExtent
-    //        [X] VkSwapchainCreateInfoKHR::presentMode
-
     swapchain_create_info.queueFamilyIndexCount = 0;
     swapchain_create_info.pQueueFamilyIndices = nullptr;
 
@@ -557,31 +542,25 @@ int main(int argc, char** argv) {
     VkExtent2D window_dimensions;
     window_dimensions.width = window_width;
     window_dimensions.height = window_height;
-    swapchain_create_info.imageExtent = window_dimensions;
     
+    swapchain_create_info.imageExtent = window_dimensions;
     swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
     // Create the swapchain using vkCreateSwapchainKHR and assign its handle to vk_swapchain!
-    VkResult resCreateSwapchainKHR = vkCreateSwapchainKHR(vk_device, &swapchain_create_info, nullptr, &vk_swapchain);
-    if (!vk_swapchain) {
-        VKL_EXIT_WITH_ERROR("No VkSwapchainKHR created or handle not assigned.");
-    }
-    if (resCreateSwapchainKHR != VK_SUCCESS) {
+    if (vkCreateSwapchainKHR(vk_device, &swapchain_create_info, nullptr, &vk_swapchain) != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("VkSwapchainKHR does not have VK_SUCCESS status.");
-    }
+    
+    if (!vk_swapchain)
+        VKL_EXIT_WITH_ERROR("No VkSwapchainKHR created or handle not assigned.");
 
-    // Use vkGetSwapchainImagesKHR to retrieve the created VkImage handles and store them in a collection (e.g., std::vector)!
     uint32_t swapchainCount;
     vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, nullptr);
+    
     std::vector< VkImage> vk_swapchain_images(swapchainCount);
     vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, vk_swapchain_images.data());
+#pragma endregion
 
-    VKL_LOG("Subtask 1.8 done.");
-
-    /* --------------------------------------------- */
-    // Subtask 1.9: Init GCG Framework
-    /* --------------------------------------------- */
-
+#pragma region GCG Framework init
     VkClearValue vk_clear_value = {};
     vk_clear_value.depthStencil.depth = 1.0f;
     vk_clear_value.depthStencil.stencil = 0;
@@ -591,7 +570,7 @@ int main(int argc, char** argv) {
         vk_device,
         window_dimensions.width,
         window_dimensions.height,
-        VK_FORMAT_D32_SFLOAT, // no stencil !!! not for future self
+        VK_FORMAT_D32_SFLOAT, // no stencil !!! note for future self
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
     );
 
@@ -614,18 +593,13 @@ int main(int argc, char** argv) {
         fbuffComp.depthAttachmentImageDetails.imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         fbuffComp.depthAttachmentImageDetails.clearValue = vk_clear_value;
     }
-    
-
 
     // Init the framework:
-    if (!gcgInitFramework(vk_instance, vk_surface, vk_physical_device, vk_device, vk_queue, swapchain_config)) {
+    if (!gcgInitFramework(vk_instance, vk_surface, vk_physical_device, vk_device, vk_queue, swapchain_config))
         VKL_EXIT_WITH_ERROR("Failed to init framework");
-    }
-    VKL_LOG("Subtask 1.9 done.");
+#pragma endregion
 
-    /* --------------------------------------------- */
-    // Subtask 2.1: Custom Graphics Pipeline
-    /* --------------------------------------------- */
+#pragma region custom graphics pipeline config
     VklGraphicsPipelineConfig config = {};
     std::string vertexPath = gcgLoadShaderFilePath("assets/shader/testVertex.vert");
     config.vertexShaderPath = vertexPath.c_str();
@@ -633,6 +607,9 @@ int main(int argc, char** argv) {
     std::string fragPath = gcgLoadShaderFilePath("assets/shader/testFrag.frag");
     config.fragmentShaderPath = fragPath.c_str();
     
+    config.polygonDrawMode = VK_POLYGON_MODE_FILL;
+    config.triangleCullingMode = VK_CULL_MODE_NONE;
+
     config.vertexInputBuffers.resize(1, {});
     config.vertexInputBuffers[0].binding = 0;
     config.vertexInputBuffers[0].stride = 3 * sizeof(float);
@@ -644,22 +621,15 @@ int main(int argc, char** argv) {
     config.inputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     config.inputAttributeDescriptions[0].offset = 0;
 
-    config.polygonDrawMode = VK_POLYGON_MODE_FILL;
-    config.triangleCullingMode = VK_CULL_MODE_NONE;
-
-    /* --------------------------------------------- */
-    // Subtask 2.2: Uniform buffer
-    /* --------------------------------------------- */
     config.descriptorLayout.resize(1, {});
     config.descriptorLayout[0].binding = 0;
     config.descriptorLayout[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     config.descriptorLayout[0].descriptorCount = 1;
     config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     config.descriptorLayout[0].pImmutableSamplers = nullptr;
+#pragma endregion
 
-    /* --------------------------------------------- */
-    // Subtask 2.4: Uniform buffer struct
-    /* --------------------------------------------- */
+#pragma region uniform buffer struct
     struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 view_proj;
@@ -688,11 +658,10 @@ int main(int argc, char** argv) {
         sizeof(ubo_teapot2), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
     );
     vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
+#pragma endregion
 
-    /* --------------------------------------------- */
-    // Subtask 2.3: Uniform buffer
-    /* --------------------------------------------- */
-    // descriptor pool
+#pragma region Uniform buffer
+#pragma region descriptor pool
     VkDescriptorPoolSize poolSize = {};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSize.descriptorCount = 8;
@@ -704,12 +673,11 @@ int main(int argc, char** argv) {
     poolInfo.maxSets = 8;
 
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-    VkResult resCreateDescPool = vkCreateDescriptorPool(vk_device, &poolInfo, nullptr, &descriptorPool);
-    if (resCreateDescPool != VK_SUCCESS)
+    if (vkCreateDescriptorPool(vk_device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("Failed to create descriptor pool");
+#pragma endregion
     
-    // descriptor set layout
-#pragma region uniform buffer constants
+#pragma region descriptor set layout
     VkDescriptorSetLayoutBinding layoutBinding = {};
     layoutBinding.binding = 0;
     layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -723,29 +691,28 @@ int main(int argc, char** argv) {
     layoutInfo.pBindings = &layoutBinding;
 
     VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-    VkResult resCreateDescSetLayout = vkCreateDescriptorSetLayout(vk_device, &layoutInfo, nullptr, &descriptorSetLayout);
-    if (resCreateDescSetLayout != VK_SUCCESS)
+    if (vkCreateDescriptorSetLayout(vk_device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("Failed to create descriptor set layout");
+#pragma endregion
     
-    // allocate the descriptor set
+#pragma region allocate the descriptor set for teapot1 and teapot 2
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &descriptorSetLayout;
-#pragma endregion
 
     VkDescriptorSet descriptorSet1 = VK_NULL_HANDLE;
-    VkResult resAllocateDescSets = vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet1);
-    if (resAllocateDescSets != VK_SUCCESS)
-        VKL_EXIT_WITH_ERROR("Failed to allocate descriptor sets");
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet1) != VK_SUCCESS)
+        VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 1");
 
     VkDescriptorSet descriptorSet2 = VK_NULL_HANDLE;
-    VkResult resAllocateDescSets2 = vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet2);
-    if (resAllocateDescSets2 != VK_SUCCESS)
-        VKL_EXIT_WITH_ERROR("Failed to allocate descriptor sets");
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet2) != VK_SUCCESS)
+        VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 2");
+#pragma endregion
 
     // write uniform buffer into descriptor set
+#pragma region write uniform buffer for teapot 1
     VkDescriptorBufferInfo bufferInfo1 = {};
     bufferInfo1.buffer = uniform_buffer1; 
     bufferInfo1.offset = 0;
@@ -761,8 +728,9 @@ int main(int argc, char** argv) {
     write1.pBufferInfo = &bufferInfo1;
 
     vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
+#pragma endregion
 
-
+#pragma region write uniform buffer for teapot 2
     VkDescriptorBufferInfo bufferInfo2 = {};
     bufferInfo2.buffer = uniform_buffer2;
     bufferInfo2.offset = 0;
@@ -778,6 +746,7 @@ int main(int argc, char** argv) {
     write2.pBufferInfo = &bufferInfo2;
 
     vkUpdateDescriptorSets(vk_device, 1, &write2, 0, nullptr);
+#pragma endregion
 
     VkPipeline vk_pipeline = VK_NULL_HANDLE;
     vk_pipeline = vklCreateGraphicsPipeline(config);
@@ -787,11 +756,8 @@ int main(int argc, char** argv) {
     }
 
     vklEnablePipelineHotReloading(window, GLFW_KEY_F5);
+#pragma endregion
 
-    /* --------------------------------------------- */
-    // Subtask 1.10: Set-up the Render Loop
-    // Subtask 1.11: Register a Key Callback
-    /* --------------------------------------------- */
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
@@ -833,9 +799,7 @@ int main(int argc, char** argv) {
     // Wait for all GPU work to finish before cleaning up:
     vkDeviceWaitIdle(vk_device);
 
-    /* --------------------------------------------- */
-    // Subtask 1.12: Cleanup
-    /* --------------------------------------------- */
+#pragma region cleanup
     vkDeviceWaitIdle(vk_device);
 
     vklDestroyGraphicsPipeline(vk_pipeline);
@@ -854,15 +818,12 @@ int main(int argc, char** argv) {
     vkDestroySurfaceKHR(vk_instance, vk_surface, nullptr);
     vkDestroyInstance(vk_instance, nullptr);
     glfwDestroyWindow(window);
+#pragma endregion
 
     return EXIT_SUCCESS;
 }
 
-/* --------------------------------------------- */
-// Helper Function Definitions
-/* --------------------------------------------- */
-
-
+#pragma region GCG helpers body
 uint32_t selectPhysicalDeviceIndex(const VkPhysicalDevice* physical_devices, uint32_t physical_device_count, VkSurfaceKHR surface) {
     // Iterate over all the physical devices and select one that satisfies all our requirements.
     // Our requirements are:
@@ -896,21 +857,6 @@ uint32_t selectPhysicalDeviceIndex(const VkPhysicalDevice* physical_devices, uin
 
 uint32_t selectPhysicalDeviceIndex(const std::vector<VkPhysicalDevice>& physical_devices, VkSurfaceKHR surface) {
     return selectPhysicalDeviceIndex(physical_devices.data(), static_cast<uint32_t>(physical_devices.size()), surface);
-}
-
-// If a discrete gpu is found return it, else return the first device
-VkPhysicalDevice trySelectFirstDiscreteGPU(const std::vector<VkPhysicalDevice>& devices) {
-    
-    for (const auto& device : devices) {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(device, &properties);
-
-        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-            return device;
-    }
-        
-    VKL_LOG("Falling back to first device");
-    return devices[0];
 }
 
 uint32_t selectQueueFamilyIndex(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
@@ -976,5 +922,4 @@ VkSurfaceCapabilitiesKHR getPhysicalDeviceSurfaceCapabilities(VkPhysicalDevice p
 VkSurfaceTransformFlagBitsKHR getSurfaceTransform(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
     return getPhysicalDeviceSurfaceCapabilities(physical_device, surface).currentTransform;
 }
-
-
+#pragma endregion
