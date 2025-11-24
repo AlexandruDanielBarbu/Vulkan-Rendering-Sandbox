@@ -5,6 +5,7 @@
  * Original version created by Lukas Gersthofer and Bernhard Steiner.
  * Vulkan edition created by Johannes Unterguggenberger (junt@cg.tuwien.ac.at).
  */
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include "PathUtils.h"
 #include "Utils.h"
 
@@ -220,26 +221,26 @@ glm::mat4 myLookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec
 glm::mat4 initial_compute_camera_matrix(const  float camera_fov, const  float aspect_ratio, const float camera_near, const float camera_far, const double camera_pitch, const double camera_yaw,
         const double deltax, const double deltay) {
         // Projection
-        glm::mat4 projection = gcgCreatePerspectiveProjectionMatrix(
-                glm::radians(camera_fov),
-                aspect_ratio,
-                camera_near,
-                camera_far
-        );
+        //glm::mat4 projection = gcgCreatePerspectiveProjectionMatrix(
+        //        glm::radians(camera_fov),
+        //        aspect_ratio,
+        //        camera_near,
+        //        camera_far
+        //);
 
         // View
-        glm::vec3 direction = glm::normalize(glm::vec3(
-                cos(camera_pitch) * sin(camera_yaw),
-                -sin(camera_pitch),
-                cos(camera_pitch) * cos(camera_yaw)
-        ));
+        //glm::vec3 direction = glm::normalize(glm::vec3(
+        //        cos(camera_pitch) * sin(camera_yaw),
+        //        -sin(camera_pitch),
+        //        cos(camera_pitch) * cos(camera_yaw)
+        //));
 
-        camera_pos = direction * camera_zoom_level;
+        //camera_pos = direction * camera_zoom_level;
 
-        glm::mat4 view = myLookAt(camera_pos, target);
+        //glm::mat4 view = myLookAt(camera_pos, target);
 
         // Output
-        return projection * view;
+        //return projection * view;
 }
 
 glm::mat4 compute_camera_matrix(const  float camera_fov, const  float aspect_ratio, const float camera_near, const float camera_far, const double camera_pitch, const double camera_yaw,
@@ -273,6 +274,80 @@ glm::mat4 compute_camera_matrix(const  float camera_fov, const  float aspect_rat
         // Output
         return projection * view;
 }
+#pragma endregion
+
+#pragma region Camera class
+class Camera {
+public:
+        Camera(const std::string ini_file_path, const double window_width, const double window_height) {
+                INIReader camera_reader(ini_file_path);
+                camera_fov   = camera_reader.GetReal("camera", "fov",   10);    // not in radians
+                camera_near  = camera_reader.GetReal("camera", "near",  10);
+                camera_far   = camera_reader.GetReal("camera", "far",   20);
+                camera_yaw   = camera_reader.GetReal("camera", "yaw",   10);    // radians
+                camera_pitch = camera_reader.GetReal("camera", "pitch", 10);    // radians
+                aspect_ratio = (double)window_width / (double)window_height;
+
+                proj = gcgCreatePerspectiveProjectionMatrix(
+                        glm::radians(camera_fov),
+                        aspect_ratio,
+                        camera_near,
+                        camera_far
+                );
+
+                // adjust projection to vulkan unit cube
+                proj[1][1] *= -1.0f;
+
+                camera_pos = target + camera_zoom_level * glm::normalize(glm::vec3(
+                        cos(camera_pitch) * sin(camera_yaw),
+                        sin(camera_pitch),
+                        cos(camera_pitch) * cos(camera_yaw)
+                ));
+        }
+private:
+        double camera_fov = 0;
+        double camera_near = 0;
+        double camera_far = 0;
+        double aspect_ratio = 0;
+
+        double camera_yaw = 0;
+        double camera_pitch = 0;
+        
+        float camera_zoom_level = 0;
+        
+        glm::mat4 proj = {};
+        
+        glm::vec3 target = {};
+        glm::vec3 camera_pos = { 0.0f, 0.0f, -5.0f };
+        
+        glm::mat4 myLookAt() const {
+                glm::vec3 up = { 0.0f, 1.0f, 0.0f };
+
+                glm::vec3 camera_forward = glm::normalize(target - camera_pos);
+                glm::vec3 camera_right = glm::normalize(glm::cross(camera_forward, up));
+                glm::vec3 camera_up = glm::cross(camera_right, camera_forward);
+
+                glm::mat4 orientation(
+                        glm::vec4(camera_right.x, camera_up.x, -camera_forward.x, 0),
+                        glm::vec4(camera_right.y, camera_up.y, -camera_forward.y, 0),
+                        glm::vec4(camera_right.z, camera_up.z, -camera_forward.z, 0),
+                        glm::vec4(0, 0, 0, 1)
+                );
+
+                glm::mat4 translation(
+                        glm::vec4(1, 0, 0, 0),
+                        glm::vec4(0, 1, 0, 0),
+                        glm::vec4(0, 0, 1, 0),
+                        glm::vec4(-camera_pos.x, -camera_pos.y, -camera_pos.z, 1)
+                );
+                
+                return (orientation * translation);
+        }
+
+        glm::mat4 get_proj_view_matrix() {
+                return proj * myLookAt();
+        }
+};
 #pragma endregion
 
 int main(int argc, char** argv) {
