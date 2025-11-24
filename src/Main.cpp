@@ -79,14 +79,22 @@ void errorCallbackFromGlfw(int error, const char* description) { std::cout << "G
 #pragma endregion
 
 #pragma region alexd custom callbacks
+bool reset_camera = false;
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+    if (key == GLFW_KEY_F && action == GLFW_PRESS)
+            reset_camera = true;
+    if (key == GLFW_KEY_F && action == GLFW_RELEASE)
+            reset_camera = false;
 }
 
 bool left_mouse_btn_pressed = false;
 bool right_mouse_btn_pressed = false;
+float scroll_delta = {};
+
 void mouse_callback(GLFWwindow* window, int button, int action, int mods)
 {
     // left mouse press
@@ -99,6 +107,7 @@ void mouse_callback(GLFWwindow* window, int button, int action, int mods)
     {
         VKL_LOG("Released left mouse button");
         left_mouse_btn_pressed = false;
+        scroll_delta = 0;
     }
 
     // right mouse press
@@ -111,17 +120,14 @@ void mouse_callback(GLFWwindow* window, int button, int action, int mods)
     {
             VKL_LOG("Released right mouse button");
             right_mouse_btn_pressed = false;
+            scroll_delta = 0;
+
     }
 }
 
-float camera_zoom_level = 5.0f;
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    camera_zoom_level -= yoffset;
-
-    if (camera_zoom_level < 0)
-        camera_zoom_level = 0;
-    VKL_LOG(camera_zoom_level);
+    scroll_delta = yoffset;
 }
 #pragma endregion
 
@@ -207,17 +213,46 @@ public:
                         return proj * myLookAt();
                 }
 
+                // strafing
                 if (right_mouse_btn_pressed) {
-                        //return my strafe thing
+                        glm::vec3 up = { 0.0f, 1.0f, 0.0f };
+
+                        glm::vec3 camera_forward = glm::normalize(target - camera_pos);
+                        glm::vec3 camera_right = glm::normalize(glm::cross(camera_forward, up));
+                        glm::vec3 camera_up = glm::cross(camera_right, camera_forward);
+
+                        // move target and camera_pos along camera local axis
+                        target -= (float)(strafe_sensitivity * deltax) * camera_right;
+                        camera_pos -= (float)(strafe_sensitivity * deltax) * camera_right;
+                        
+                        target += (float)(strafe_sensitivity * deltay) * camera_up;
+                        camera_pos += (float)(strafe_sensitivity * deltay) * camera_up;
+
                         return proj * myLookAt();
                 }
 
                 // else rerturrn what is there
+                compute_camera_pos();
                 return proj * myLookAt();
+        }
+
+        void reset_camera_state() {
+                target = {};
+                camera_zoom_level = 5;
+                camera_pos = { 0, 0, camera_zoom_level };
+                camera_pitch = 0;
+                camera_yaw = 0;
+        }
+
+        void update_camera_zoom(const float delta) {
+                camera_zoom_level -= delta * scroll_sensitivity;
+
+                if (camera_zoom_level < 0) camera_zoom_level = 0;
         }
 private:
         const double arcball_sensitivity = 0.01;
         const double strafe_sensitivity = 0.01;
+        const double scroll_sensitivity = 0.07;
 
         double camera_fov = 0;
         double camera_near = 0;
@@ -749,9 +784,10 @@ int main(int argc, char** argv) {
 
         vklWaitForNextSwapchainImage();
         
-        double deltax = {};
-        double deltay = {};
-        get_mouse_delta(window, deltax, deltay);
+        if (reset_camera) main_camera.reset_camera_state();
+        main_camera.update_camera_zoom(scroll_delta); scroll_delta = 0;
+
+        double deltax = {}; double deltay = {}; get_mouse_delta(window, deltax, deltay);
         glm::mat4 proj_view = main_camera.get_proj_view_matrix(deltax, deltay);
         
         ubo_teapot1.view_proj = proj_view * model1;
