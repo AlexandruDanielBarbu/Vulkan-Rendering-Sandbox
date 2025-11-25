@@ -191,6 +191,31 @@ void get_mouse_delta(GLFWwindow* window, double& deltax, double& deltay) {
     deltax = 0.0;
     deltay = 0.0;
 }
+
+void alexd_drawTeapot(const VkPipeline vk_pipeline, const VkDescriptorSet& descriptorSet) {
+        // command buffer and pipeline layout
+        VkCommandBuffer commandBuffer = vklGetCurrentCommandBuffer();
+        VkPipelineLayout pipelineLayout = vklGetLayoutForPipeline(vk_pipeline);
+
+        // bind descriptor set
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+        // bind pipeline
+        vklCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline);
+
+        // bind vertex buffer
+        VkBuffer vbuff = gcgGetTeapotPositionsBuffer();
+        VkDeviceSize  offsets[] = { 0 };
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vbuff, offsets);
+
+        // bind vertex index buffer
+        VkBuffer ibuff = gcgGetTeapotIndicesBuffer();
+        vkCmdBindIndexBuffer(commandBuffer, ibuff, 0, VK_INDEX_TYPE_UINT32);
+
+        // draw
+        uint32_t numTeapotIndices = gcgGetNumTeapotIndices();
+        vkCmdDrawIndexed(commandBuffer, numTeapotIndices, 1, 0, 0, 0);
+}
 #pragma endregion
 
 #pragma region Camera class
@@ -895,8 +920,9 @@ int main(int argc, char** argv) {
                 if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_fill_cullFront;
                 if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_fill_cullBack;
         }
-        gcgDrawTeapot(*vk_pipeline, descriptorSet1);
-        gcgDrawTeapot(*vk_pipeline, descriptorSet2);
+        
+        alexd_drawTeapot(*vk_pipeline, descriptorSet1);
+        alexd_drawTeapot(*vk_pipeline, descriptorSet2);
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
