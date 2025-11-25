@@ -646,7 +646,8 @@ int main(int argc, char** argv) {
     
     // wireframe
     config.polygonDrawMode = VK_POLYGON_MODE_LINE;
-    config.triangleCullingMode = VK_CULL_MODE_NONE;
+    // backface culling
+    config.triangleCullingMode = VK_CULL_MODE_BACK_BIT;
 
     config.vertexInputBuffers.resize(1, {});
     config.vertexInputBuffers[0].binding = 0;
