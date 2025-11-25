@@ -43,3 +43,15 @@ Please follow the instructions of this readme carefully if something does not wo
 If everything was done correctly, please look if a new checkout of the Repo in a different location helps.
 Sometimes CMake caches can interfere for example. Sometimes project caches can also lead to problems.
 Windows path length is a major problem often, it is restricted to 260 characters and you should place the repository into a short path
+
+# Controls:
+
+- left mouse btn: arcball camera
+- right mouse btn: strafe camera
+- scroll wheel: zoom in / out
+
+- F: reset camera position
+
+- F1: wireframe on / off
+- F2: cycle: cull modes (none, front, back)
+- F5: reload shaders
