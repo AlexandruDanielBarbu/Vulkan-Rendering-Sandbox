@@ -463,13 +463,28 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region vulkan physical device
+    VkPhysicalDeviceFeatures features = {};
+    features.fillModeNonSolid = VK_TRUE;
+
     // Get devices
     uint32_t physicalDeviceCount = 0;
     vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, nullptr);
     
     std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
     vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, physicalDevices.data());
+    
+    // remove physical devices that do not support wireframe mode
+    for (size_t i = 0; i < physicalDevices.size(); i++)
+    {
+            VkPhysicalDeviceFeatures physDeviceFeatures = {};
+            vkGetPhysicalDeviceFeatures(physicalDevices[i], &physDeviceFeatures);
 
+            if (physDeviceFeatures.fillModeNonSolid == VK_FALSE) {
+                    VKL_LOG("Removing a physical device not supporting fillModeNonSolid");
+                    physicalDevices.erase(physicalDevices.begin() + i);
+            }
+    }
+    
     // Print all devices' name and type
     for (const auto& device : physicalDevices) {
         VkPhysicalDeviceProperties properties;
@@ -516,6 +531,7 @@ int main(int argc, char** argv) {
     vk_device_create_info.queueCreateInfoCount = 1;
     vk_device_create_info.pQueueCreateInfos = &vk_device_queue_create_info;
     vk_device_create_info.enabledExtensionCount = 1;
+    vk_device_create_info.pEnabledFeatures = &features;
     const char* device_extensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
@@ -628,7 +644,8 @@ int main(int argc, char** argv) {
     std::string fragPath = gcgLoadShaderFilePath("assets/shader/testFrag.frag");
     config.fragmentShaderPath = fragPath.c_str();
     
-    config.polygonDrawMode = VK_POLYGON_MODE_FILL;
+    // wireframe
+    config.polygonDrawMode = VK_POLYGON_MODE_LINE;
     config.triangleCullingMode = VK_CULL_MODE_NONE;
 
     config.vertexInputBuffers.resize(1, {});
