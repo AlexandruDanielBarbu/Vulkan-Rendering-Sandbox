@@ -80,6 +80,13 @@ void errorCallbackFromGlfw(int error, const char* description) { std::cout << "G
 
 #pragma region alexd custom callbacks
 bool reset_camera = false;
+bool wireframe_mode = false;
+std::vector<size_t> cullModes = {
+    VK_CULL_MODE_NONE,
+    VK_CULL_MODE_FRONT_BIT,
+    VK_CULL_MODE_BACK_BIT
+};
+size_t selectedCullMode = 0;
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
@@ -89,6 +96,15 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             reset_camera = true;
     if (key == GLFW_KEY_F && action == GLFW_RELEASE)
             reset_camera = false;
+
+    if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
+            wireframe_mode = !wireframe_mode;
+    }
+
+    if (key == GLFW_KEY_F2 && action == GLFW_PRESS) {
+            selectedCullMode++;
+            selectedCullMode %= cullModes.size();
+    }
 }
 
 bool left_mouse_btn_pressed = false;
@@ -309,6 +325,8 @@ int main(int argc, char** argv) {
     CMDLineArgs cmdline_args;
     gcgParseArgs(cmdline_args, argc, argv);
 
+#pragma region App settings
+
 #pragma region load window settings
     INIReader window_reader("assets/settings/window.ini");
     int window_width = window_reader.GetInteger("window", "width", 800);
@@ -317,6 +335,7 @@ int main(int argc, char** argv) {
     std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
 #pragma endregion
 
+
 #pragma region load camera settings
     // GCG framework stuff
     std::string init_camera_filepath = "assets/settings/camera_front.ini";
@@ -324,6 +343,22 @@ int main(int argc, char** argv) {
         init_camera_filepath = cmdline_args.init_camera_filepath;
     
     Camera main_camera(init_camera_filepath, window_width, window_height);
+#pragma endregion
+
+
+#pragma region load render settings
+    std::string init_renderer_filepath = "assets/settings/renderer_standard.ini";
+    if (cmdline_args.init_renderer) {
+            init_renderer_filepath = cmdline_args.init_renderer_filepath;
+    }
+
+    INIReader renderer_reader(init_renderer_filepath);
+    wireframe_mode = renderer_reader.GetBoolean("renderer", "wireframe", false);
+    bool with_backface_culling = renderer_reader.GetBoolean("renderer",
+            "backface_culling", false);
+    if (with_backface_culling) selectedCullMode = 2;
+#pragma endregion
+
 #pragma endregion
 
     
@@ -637,35 +672,56 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region custom graphics pipeline config
-    VklGraphicsPipelineConfig config = {};
     std::string vertexPath = gcgLoadShaderFilePath("assets/shader/testVertex.vert");
-    config.vertexShaderPath = vertexPath.c_str();
-    
     std::string fragPath = gcgLoadShaderFilePath("assets/shader/testFrag.frag");
-    config.fragmentShaderPath = fragPath.c_str();
     
-    // wireframe
-    config.polygonDrawMode = VK_POLYGON_MODE_LINE;
-    // backface culling
-    config.triangleCullingMode = VK_CULL_MODE_BACK_BIT;
+    // i could have used the same config... sry did not see that
+    auto populate_pipeline_configs = [&](VklGraphicsPipelineConfig& config, const bool wireframe_mode, const VkCullModeFlagBits cullMode) {
+            config = {};
+            
+            config.vertexShaderPath = vertexPath.c_str();
+            config.fragmentShaderPath = fragPath.c_str();
+    
+            // wireframe or not
+            if (wireframe_mode) config.polygonDrawMode = VK_POLYGON_MODE_LINE;
+            else config.polygonDrawMode = VK_POLYGON_MODE_FILL;
 
-    config.vertexInputBuffers.resize(1, {});
-    config.vertexInputBuffers[0].binding = 0;
-    config.vertexInputBuffers[0].stride = 3 * sizeof(float);
-    config.vertexInputBuffers[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+            // cull mode
+            config.triangleCullingMode = cullMode;
 
-    config.inputAttributeDescriptions.resize(1, {});
-    config.inputAttributeDescriptions[0].location = 0;
-    config.inputAttributeDescriptions[0].binding = 0;
-    config.inputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    config.inputAttributeDescriptions[0].offset = 0;
+            config.vertexInputBuffers.resize(1, {});
+            config.vertexInputBuffers[0].binding = 0;
+            config.vertexInputBuffers[0].stride = 3 * sizeof(float);
+            config.vertexInputBuffers[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    config.descriptorLayout.resize(1, {});
-    config.descriptorLayout[0].binding = 0;
-    config.descriptorLayout[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    config.descriptorLayout[0].descriptorCount = 1;
-    config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    config.descriptorLayout[0].pImmutableSamplers = nullptr;
+            config.inputAttributeDescriptions.resize(1, {});
+            config.inputAttributeDescriptions[0].location = 0;
+            config.inputAttributeDescriptions[0].binding = 0;
+            config.inputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+            config.inputAttributeDescriptions[0].offset = 0;
+
+            config.descriptorLayout.resize(1, {});
+            config.descriptorLayout[0].binding = 0;
+            config.descriptorLayout[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            config.descriptorLayout[0].descriptorCount = 1;
+            config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            config.descriptorLayout[0].pImmutableSamplers = nullptr;
+    };
+
+    VklGraphicsPipelineConfig config_wire_cullNone;
+    populate_pipeline_configs(config_wire_cullNone, true, VK_CULL_MODE_NONE);
+    VklGraphicsPipelineConfig config_wire_cullFront;
+    populate_pipeline_configs(config_wire_cullFront, true, VK_CULL_MODE_FRONT_BIT);
+    VklGraphicsPipelineConfig config_wire_cullBack;
+    populate_pipeline_configs(config_wire_cullBack, true, VK_CULL_MODE_BACK_BIT);
+
+
+    VklGraphicsPipelineConfig config_fill_cullNone;
+    populate_pipeline_configs(config_fill_cullNone, false, VK_CULL_MODE_NONE);
+    VklGraphicsPipelineConfig config_fill_cullFront;
+    populate_pipeline_configs(config_fill_cullFront, false, VK_CULL_MODE_FRONT_BIT);
+    VklGraphicsPipelineConfig config_fill_cullBack;
+    populate_pipeline_configs(config_fill_cullBack, false, VK_CULL_MODE_BACK_BIT);
 #pragma endregion
 
 #pragma region uniform buffer struct
@@ -787,12 +843,23 @@ int main(int argc, char** argv) {
     vkUpdateDescriptorSets(vk_device, 1, &write2, 0, nullptr);
 #pragma endregion
 
-    VkPipeline vk_pipeline = VK_NULL_HANDLE;
-    vk_pipeline = vklCreateGraphicsPipeline(config);
+    VkPipeline vk_pipeline_wire_cullNone = VK_NULL_HANDLE;
+    vk_pipeline_wire_cullNone = vklCreateGraphicsPipeline(config_wire_cullNone);
+    VkPipeline vk_pipeline_wire_cullFront = VK_NULL_HANDLE;
+    vk_pipeline_wire_cullFront = vklCreateGraphicsPipeline(config_wire_cullFront);
+    VkPipeline vk_pipeline_wire_cullBack = VK_NULL_HANDLE;
+    vk_pipeline_wire_cullBack = vklCreateGraphicsPipeline(config_wire_cullBack);
 
-    if (vk_pipeline == VK_NULL_HANDLE) {
-        VKL_EXIT_WITH_ERROR("Failed to init the custom pipeline.");
-    }
+    VkPipeline vk_pipeline_fill_cullNone = VK_NULL_HANDLE;
+    vk_pipeline_fill_cullNone = vklCreateGraphicsPipeline(config_fill_cullNone);
+    VkPipeline vk_pipeline_fill_cullFront = VK_NULL_HANDLE;
+    vk_pipeline_fill_cullFront = vklCreateGraphicsPipeline(config_fill_cullFront);
+    VkPipeline vk_pipeline_fill_cullBack = VK_NULL_HANDLE;
+    vk_pipeline_fill_cullBack = vklCreateGraphicsPipeline(config_fill_cullBack);
+
+    //if (vk_pipeline == VK_NULL_HANDLE) {
+    //    VKL_EXIT_WITH_ERROR("Failed to init the custom pipeline.");
+    //}
 
     vklEnablePipelineHotReloading(window, GLFW_KEY_F5);
 #pragma endregion
@@ -816,8 +883,20 @@ int main(int argc, char** argv) {
         
         vklStartRecordingCommands();
         
-        gcgDrawTeapot(vk_pipeline, descriptorSet1);
-        gcgDrawTeapot(vk_pipeline, descriptorSet2);
+        // select right pipeline
+        VkPipeline* vk_pipeline = nullptr;
+        if (wireframe_mode) {
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) vk_pipeline = &vk_pipeline_wire_cullNone;
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_wire_cullFront;
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_wire_cullBack;
+        }
+        else {
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) vk_pipeline = &vk_pipeline_fill_cullNone;
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_fill_cullFront;
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_fill_cullBack;
+        }
+        gcgDrawTeapot(*vk_pipeline, descriptorSet1);
+        gcgDrawTeapot(*vk_pipeline, descriptorSet2);
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
@@ -843,7 +922,13 @@ int main(int argc, char** argv) {
 #pragma region cleanup
     vkDeviceWaitIdle(vk_device);
 
-    vklDestroyGraphicsPipeline(vk_pipeline);
+    vklDestroyGraphicsPipeline(vk_pipeline_wire_cullNone);
+    vklDestroyGraphicsPipeline(vk_pipeline_wire_cullFront);
+    vklDestroyGraphicsPipeline(vk_pipeline_wire_cullBack);
+
+    vklDestroyGraphicsPipeline(vk_pipeline_fill_cullNone);
+    vklDestroyGraphicsPipeline(vk_pipeline_fill_cullFront);
+    vklDestroyGraphicsPipeline(vk_pipeline_fill_cullBack);
 
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
