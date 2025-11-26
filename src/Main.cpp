@@ -217,7 +217,7 @@ void alexd_drawTeapot(const VkPipeline vk_pipeline, const VkDescriptorSet& descr
         vkCmdDrawIndexed(commandBuffer, numTeapotIndices, 1, 0, 0, 0);
 }
 
-void alexd_drawCube(const VkPipeline vk_pipeline, const VkDescriptorSet& descriptorSet, const VkBuffer cube_vbuff, const VkBuffer cube_ibuff) {
+void alexd_drawCube(const VkPipeline vk_pipeline, const VkDescriptorSet& descriptorSet, const VkBuffer cube_vbuff, const VkBuffer cube_ibuff, const uint32_t numIndices) {
         // command buffer and pipeline layout
         VkCommandBuffer commandBuffer = vklGetCurrentCommandBuffer();
         VkPipelineLayout pipelineLayout = vklGetLayoutForPipeline(vk_pipeline);
@@ -236,8 +236,7 @@ void alexd_drawCube(const VkPipeline vk_pipeline, const VkDescriptorSet& descrip
         vkCmdBindIndexBuffer(commandBuffer, cube_ibuff, 0, VK_INDEX_TYPE_UINT32);
 
         // draw
-        uint32_t faces = 6;
-        vkCmdDrawIndexed(commandBuffer, faces * 2 * 3, 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, numIndices, 1, 0, 0, 0);
 }
 
 #pragma endregion
@@ -367,7 +366,28 @@ private:
         }
 };
 
-class Cube {
+class Object {
+public:
+        const void* get_vbuff() const {
+                return vbuff.data();
+        }
+        size_t get_vbuff_size() const {
+                return vbuff.size();
+        }
+
+        const void* get_ibuff() const {
+                return ibuff.data();
+        }
+        size_t get_ibuff_size() const {
+                return ibuff.size();
+        }
+
+protected:
+        std::vector<glm::vec3> vbuff;
+        std::vector<uint32_t> ibuff;
+};
+
+class Cube : public Object {
 public:
         Cube(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& origin = { 0, 0, 0 }) {
                 vbuff = {
@@ -410,24 +430,62 @@ public:
                         1, 6, 5
                 };
         }
-        
-        const void* get_vbuff() const {
-                return vbuff.data();
-        }
-        size_t get_vbuff_size() const {
-                return vbuff.size();
+};
+
+class CornellBox : public Object {
+public:
+        CornellBox(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& origin = { 0, 0, 0 }) {
+                vbuff = {
+                        // top verts
+                        origin + glm::vec3(-width / 2, height / 2, -depth / 2),
+                        origin + glm::vec3(width / 2, height / 2, -depth / 2),
+                        origin + glm::vec3(width / 2, height / 2,  depth / 2),
+                        origin + glm::vec3(-width / 2, height / 2,  depth / 2),
+
+                        // bottom verts
+                        origin + glm::vec3(-width / 2, -height / 2, -depth / 2),
+                        origin + glm::vec3(width / 2, -height / 2, -depth / 2),
+                        origin + glm::vec3(width / 2, -height / 2,  depth / 2),
+                        origin + glm::vec3(-width / 2, -height / 2,  depth / 2)
+                };
+
+                // define ibuff (no front face and flip all faces from what i understand
+                ibuff = {
+                        // TOP (y = +h/2), normal = +Y
+                        1, 2, 3,
+                        0, 1, 3,
+
+                        // BOTTOM (y = -h/2), normal = -Y
+                        6, 5, 4,
+                        7, 6, 4,
+
+                        // FRONT  (z = +d/2), normal = +Z
+                        //0, 1, 5,
+                        //0, 5, 4,
+
+                        // BACK   (z = -d/2), normal = -Z
+                        7, 3, 2,
+                        6, 7, 2,
+
+                        // LEFT   (x = -w/2), normal = -X
+                        4, 0, 3,
+                        7, 4, 3,
+
+                        // RIGHT  (x = +w/2), normal = +X
+                        6, 2, 1,
+                        5, 6, 1
+                };
+
         }
 
-        const void* get_ibuff() const {
-                return ibuff.data();
-        }
-        size_t get_ibuff_size() const {
-                return ibuff.size();
-        }
 private:
-        std::vector<glm::vec3> vbuff;
-        std::vector<uint32_t> ibuff;
+        glm::vec3 leftFaceColor   = glm::vec3(0.49f, 0.06f, 0.22f);
+        glm::vec3 rightFaceColor  = glm::vec3(0.00f, 0.13f, 0.31f);
+        glm::vec3 topFaceColor    = glm::vec3(0.96f, 0.93f, 0.85f);
+        glm::vec3 bottomFaceColor = glm::vec3(0.64f, 0.64f, 0.64f);
+        glm::vec3 backFaceColor   = glm::vec3(0.76f, 0.74f, 0.68f);
 };
+
 #pragma endregion
 
 int main(int argc, char** argv) {
@@ -1022,8 +1080,8 @@ int main(int argc, char** argv) {
         
         //alexd_drawTeapot(*vk_pipeline, descriptorSet1);
         //alexd_drawTeapot(*vk_pipeline, descriptorSet2);
-        alexd_drawCube(*vk_pipeline, descriptorSet1, cube1_vbuff, cube1_ibuff);
-        alexd_drawCube(*vk_pipeline, descriptorSet2, cube1_vbuff, cube1_ibuff);
+        alexd_drawCube(*vk_pipeline, descriptorSet1, cube1_vbuff, cube1_ibuff, static_cast<uint32_t>(cube1.get_ibuff_size()));
+        alexd_drawCube(*vk_pipeline, descriptorSet2, cube1_vbuff, cube1_ibuff, static_cast<uint32_t>(cube1.get_ibuff_size()));
 
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
