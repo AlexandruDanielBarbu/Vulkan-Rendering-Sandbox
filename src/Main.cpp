@@ -389,12 +389,34 @@ public:
                 return vk_ibuff;
         };
 
+        void apply_rotation(const float rads, const glm::vec3& rot) {
+                glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
+
+                object_matrix *= rotationMatrix;
+        }
+        void apply_scale(const glm::vec3& scale) {
+                glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), scale);
+
+                object_matrix *= scaleMatrix;
+        }
+        void apply_translation(const glm::vec3& tr) {
+                glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), tr);
+
+                object_matrix *= translationMatrix;
+        }
+        glm::mat4 get_object_matrix() {
+                return object_matrix;
+        }
+
 protected:
         std::vector<glm::vec3> vbuff;
         std::vector<uint32_t> ibuff;
 
         VkBuffer vk_vbuff;
         VkBuffer vk_ibuff;
+
+        glm::mat4 object_matrix = glm::mat4(1.0f);
+
 };
 
 class Cube : public Object {
