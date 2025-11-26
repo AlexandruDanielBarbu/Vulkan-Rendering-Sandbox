@@ -216,9 +216,33 @@ void alexd_drawTeapot(const VkPipeline vk_pipeline, const VkDescriptorSet& descr
         uint32_t numTeapotIndices = gcgGetNumTeapotIndices();
         vkCmdDrawIndexed(commandBuffer, numTeapotIndices, 1, 0, 0, 0);
 }
+
+void alexd_drawCube(const VkPipeline vk_pipeline, const VkDescriptorSet& descriptorSet, const VkBuffer cube_vbuff, const VkBuffer cube_ibuff) {
+        // command buffer and pipeline layout
+        VkCommandBuffer commandBuffer = vklGetCurrentCommandBuffer();
+        VkPipelineLayout pipelineLayout = vklGetLayoutForPipeline(vk_pipeline);
+
+        // bind descriptor set
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+        // bind pipeline
+        vklCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_pipeline);
+
+        // bind vertex buffer
+        VkDeviceSize  offsets[] = { 0 };
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &cube_vbuff, offsets);
+
+        // bind vertex index buffer
+        vkCmdBindIndexBuffer(commandBuffer, cube_ibuff, 0, VK_INDEX_TYPE_UINT32);
+
+        // draw
+        uint32_t faces = 6;
+        vkCmdDrawIndexed(commandBuffer, faces * 2 * 3, 1, 0, 0, 0);
+}
+
 #pragma endregion
 
-#pragma region Camera class
+#pragma region alexd defined classes
 class Camera {
 public:
         Camera(const std::string& ini_file_path, const double window_width, const double window_height) {
@@ -341,6 +365,68 @@ private:
                 return (orientation * translation);
                 //return glm::lookAt(camera_pos, target, up);
         }
+};
+
+class Cube {
+public:
+        Cube(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& origin = { 0, 0, 0 }) {
+                vbuff = {
+                        // top verts
+                        origin + glm::vec3(-width / 2, height / 2, -depth / 2),
+                        origin + glm::vec3( width / 2, height / 2, -depth / 2),
+                        origin + glm::vec3( width / 2, height / 2,  depth / 2),
+                        origin + glm::vec3(-width / 2, height / 2,  depth / 2),
+
+                        // bottom verts
+                        origin + glm::vec3(-width / 2, -height / 2, -depth / 2),
+                        origin + glm::vec3( width / 2, -height / 2, -depth / 2),
+                        origin + glm::vec3( width / 2, -height / 2,  depth / 2),
+                        origin + glm::vec3(-width / 2, -height / 2,  depth / 2)
+                };
+
+                ibuff = {
+                        // TOP (y = +h/2), normal = +Y
+                        3, 2, 1,
+                        3, 1, 0,
+
+                        // BOTTOM (y = -h/2), normal = -Y
+                        4, 5, 6,
+                        4, 6, 7,
+
+                        // FRONT  (z = +d/2), normal = +Z
+                        0, 1, 5,
+                        0, 5, 4,
+
+                        // BACK   (z = -d/2), normal = -Z
+                        2, 3, 7,
+                        2, 7, 6,
+
+                        // LEFT   (x = -w/2), normal = -X
+                        3, 0, 4,
+                        3, 4, 7,
+
+                        // RIGHT  (x = +w/2), normal = +X
+                        1, 2, 6,
+                        1, 6, 5
+                };
+        }
+        
+        const void* get_vbuff() const {
+                return vbuff.data();
+        }
+        size_t get_vbuff_size() const {
+                return vbuff.size();
+        }
+
+        const void* get_ibuff() const {
+                return ibuff.data();
+        }
+        size_t get_ibuff_size() const {
+                return ibuff.size();
+        }
+private:
+        std::vector<glm::vec3> vbuff;
+        std::vector<uint32_t> ibuff;
 };
 #pragma endregion
 
@@ -779,6 +865,19 @@ int main(int argc, char** argv) {
     );
     vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
 #pragma endregion
+    
+#pragma region Cube vbuff adn ibuff
+        Cube cube1 = Cube();
+
+        VkBuffer cube1_vbuff = vklCreateHostCoherentBufferAndUploadData(
+                cube1.get_vbuff(), cube1.get_vbuff_size() * sizeof(glm::vec3), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+        );
+
+        VkBuffer cube1_ibuff = vklCreateHostCoherentBufferAndUploadData(
+                cube1.get_ibuff(), cube1.get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+        );
+#pragma endregion
+
 
 #pragma region Uniform buffer
 #pragma region descriptor pool
@@ -921,9 +1020,11 @@ int main(int argc, char** argv) {
                 if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_fill_cullBack;
         }
         
-        alexd_drawTeapot(*vk_pipeline, descriptorSet1);
-        alexd_drawTeapot(*vk_pipeline, descriptorSet2);
-        
+        //alexd_drawTeapot(*vk_pipeline, descriptorSet1);
+        //alexd_drawTeapot(*vk_pipeline, descriptorSet2);
+        alexd_drawCube(*vk_pipeline, descriptorSet1, cube1_vbuff, cube1_ibuff);
+        alexd_drawCube(*vk_pipeline, descriptorSet2, cube1_vbuff, cube1_ibuff);
+
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
 
@@ -959,8 +1060,12 @@ int main(int argc, char** argv) {
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
     
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cube1_vbuff);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cube1_ibuff);
+    
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer2);
+
     vklDestroyDeviceLocalImageAndItsBackingMemory(depth_buffer);
     
     gcgDestroyFramework();
