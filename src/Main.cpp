@@ -382,9 +382,19 @@ public:
                 return ibuff.size();
         }
 
+        VkBuffer get_vk_vbuff() {
+                return vk_vbuff;
+        };
+        VkBuffer get_vk_ibuff() {
+                return vk_ibuff;
+        };
+
 protected:
         std::vector<glm::vec3> vbuff;
         std::vector<uint32_t> ibuff;
+
+        VkBuffer vk_vbuff;
+        VkBuffer vk_ibuff;
 };
 
 class Cube : public Object {
@@ -429,6 +439,14 @@ public:
                         1, 2, 6,
                         1, 6, 5
                 };
+        
+                vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
+                        get_vbuff(), get_vbuff_size() * sizeof(glm::vec3), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+                );
+
+                vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
+                        get_ibuff(), get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+                );
         }
 };
 
@@ -476,6 +494,13 @@ public:
                         5, 6, 1
                 };
 
+                vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
+                        get_vbuff(), get_vbuff_size() * sizeof(glm::vec3), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+                );
+
+                vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
+                        get_ibuff(), get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+                );
         }
 
 private:
@@ -924,17 +949,8 @@ int main(int argc, char** argv) {
     vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
 #pragma endregion
     
-#pragma region Cube vbuff adn ibuff
         Cube cube1 = Cube();
-
-        VkBuffer cube1_vbuff = vklCreateHostCoherentBufferAndUploadData(
-                cube1.get_vbuff(), cube1.get_vbuff_size() * sizeof(glm::vec3), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-        );
-
-        VkBuffer cube1_ibuff = vklCreateHostCoherentBufferAndUploadData(
-                cube1.get_ibuff(), cube1.get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-        );
-#pragma endregion
+        CornellBox cornellBox = CornellBox();
 
 
 #pragma region Uniform buffer
@@ -988,7 +1004,6 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 2");
 #pragma endregion
 
-    // write uniform buffer into descriptor set
 #pragma region write uniform buffer for teapot 1
     VkDescriptorBufferInfo bufferInfo1 = {};
     bufferInfo1.buffer = uniform_buffer1; 
@@ -1080,8 +1095,8 @@ int main(int argc, char** argv) {
         
         //alexd_drawTeapot(*vk_pipeline, descriptorSet1);
         //alexd_drawTeapot(*vk_pipeline, descriptorSet2);
-        alexd_drawCube(*vk_pipeline, descriptorSet1, cube1_vbuff, cube1_ibuff, static_cast<uint32_t>(cube1.get_ibuff_size()));
-        alexd_drawCube(*vk_pipeline, descriptorSet2, cube1_vbuff, cube1_ibuff, static_cast<uint32_t>(cube1.get_ibuff_size()));
+        alexd_drawCube(*vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
+        alexd_drawCube(*vk_pipeline, descriptorSet2, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
 
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
@@ -1118,9 +1133,12 @@ int main(int argc, char** argv) {
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
     
-    vklDestroyHostCoherentBufferAndItsBackingMemory(cube1_vbuff);
-    vklDestroyHostCoherentBufferAndItsBackingMemory(cube1_ibuff);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cube1.get_vk_vbuff());
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cube1.get_vk_ibuff());
     
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cornellBox.get_vk_vbuff());
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cornellBox.get_vk_ibuff());
+
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer2);
 
