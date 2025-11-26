@@ -1095,9 +1095,13 @@ int main(int argc, char** argv) {
         
         //alexd_drawTeapot(*vk_pipeline, descriptorSet1);
         //alexd_drawTeapot(*vk_pipeline, descriptorSet2);
-        alexd_drawCube(*vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
-        alexd_drawCube(*vk_pipeline, descriptorSet2, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
 
+        //alexd_drawCube(*vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
+        //alexd_drawCube(*vk_pipeline, descriptorSet2, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
+
+        alexd_drawCube(*vk_pipeline, descriptorSet1, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
+        
+        
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
 
