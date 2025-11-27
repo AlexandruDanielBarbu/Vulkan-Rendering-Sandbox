@@ -366,6 +366,11 @@ private:
         }
 };
 
+struct Vertex {
+        glm::vec3 pos;
+        glm::vec3 color;
+};
+
 class Object {
 public:
         const void* get_vbuff() const {
@@ -389,34 +394,33 @@ public:
                 return vk_ibuff;
         };
 
-        void apply_rotation(const float rads, const glm::vec3& rot) {
-                glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
+        //void apply_rotation(const float rads, const glm::vec3& rot) {
+        //        glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
 
-                object_matrix *= rotationMatrix;
-        }
-        void apply_scale(const glm::vec3& scale) {
-                glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), scale);
+        //        object_matrix *= rotationMatrix;
+        //}
+        //void apply_scale(const glm::vec3& scale) {
+        //        glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), scale);
 
-                object_matrix *= scaleMatrix;
-        }
-        void apply_translation(const glm::vec3& tr) {
-                glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), tr);
+        //        object_matrix *= scaleMatrix;
+        //}
+        //void apply_translation(const glm::vec3& tr) {
+        //        glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), tr);
 
-                object_matrix *= translationMatrix;
-        }
-        glm::mat4 get_object_matrix() {
-                return object_matrix;
-        }
+        //        object_matrix *= translationMatrix;
+        //}
+        //glm::mat4 get_object_matrix() {
+        //        return object_matrix;
+        //}
 
 protected:
-        std::vector<glm::vec3> vbuff;
+        std::vector<Vertex> vbuff;
         std::vector<uint32_t> ibuff;
 
         VkBuffer vk_vbuff;
         VkBuffer vk_ibuff;
 
-        glm::mat4 object_matrix = glm::mat4(1.0f);
-
+        //glm::mat4 object_matrix = glm::mat4(1.0f);
 };
 
 class Cube : public Object {
@@ -424,16 +428,16 @@ public:
         Cube(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& origin = { 0, 0, 0 }) {
                 vbuff = {
                         // top verts
-                        origin + glm::vec3(-width / 2, height / 2, -depth / 2),
-                        origin + glm::vec3( width / 2, height / 2, -depth / 2),
-                        origin + glm::vec3( width / 2, height / 2,  depth / 2),
-                        origin + glm::vec3(-width / 2, height / 2,  depth / 2),
+                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), {}},
+                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), {}},
+                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), {}},
+                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), {}},
 
                         // bottom verts
-                        origin + glm::vec3(-width / 2, -height / 2, -depth / 2),
-                        origin + glm::vec3( width / 2, -height / 2, -depth / 2),
-                        origin + glm::vec3( width / 2, -height / 2,  depth / 2),
-                        origin + glm::vec3(-width / 2, -height / 2,  depth / 2)
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), {}},
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), {}},
+                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), {}},
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), {}}
                 };
 
                 ibuff = {
@@ -463,7 +467,7 @@ public:
                 };
         
                 vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
-                        get_vbuff(), get_vbuff_size() * sizeof(glm::vec3), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+                        get_vbuff(), get_vbuff_size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
                 );
 
                 vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
@@ -477,47 +481,60 @@ public:
         CornellBox(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& origin = { 0, 0, 0 }) {
                 vbuff = {
                         // top verts
-                        origin + glm::vec3(-width / 2, height / 2, -depth / 2),
-                        origin + glm::vec3(width / 2, height / 2, -depth / 2),
-                        origin + glm::vec3(width / 2, height / 2,  depth / 2),
-                        origin + glm::vec3(-width / 2, height / 2,  depth / 2),
+                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), topFaceColor},
+                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), topFaceColor},
+                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), topFaceColor},
+                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), topFaceColor},
 
                         // bottom verts
-                        origin + glm::vec3(-width / 2, -height / 2, -depth / 2),
-                        origin + glm::vec3(width / 2, -height / 2, -depth / 2),
-                        origin + glm::vec3(width / 2, -height / 2,  depth / 2),
-                        origin + glm::vec3(-width / 2, -height / 2,  depth / 2)
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), bottomFaceColor},
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), bottomFaceColor},
+                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), bottomFaceColor},
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), bottomFaceColor},
+
+                        // left verts
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), leftFaceColor},
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), leftFaceColor},
+                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), leftFaceColor},
+                        {origin + glm::vec3(-width / 2,  height / 2,  depth / 2), leftFaceColor},
+
+                        // right verts
+                        {origin + glm::vec3(width / 2, -height / 2, -depth / 2), rightFaceColor},
+                        {origin + glm::vec3(width / 2, -height / 2,  depth / 2), rightFaceColor},
+                        {origin + glm::vec3(width / 2,  height / 2,  depth / 2), rightFaceColor},
+                        {origin + glm::vec3(width / 2,  height / 2, -depth / 2), rightFaceColor},
+
+                        // back verts
+                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), backFaceColor},
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), backFaceColor},
+                        {origin + glm::vec3( width / 2,  height / 2,  depth / 2), backFaceColor},
+                        {origin + glm::vec3( width / 2,  height / 2, -depth / 2), backFaceColor}
                 };
 
-                // define ibuff (no front face and flip all faces from what i understand
                 ibuff = {
-                        // TOP (y = +h/2), normal = +Y
-                        1, 2, 3,
-                        0, 1, 3,
+                        // TOP (0,1,2,3)
+                        1, 0, 3,
+                        1, 3, 2,
 
-                        // BOTTOM (y = -h/2), normal = -Y
-                        6, 5, 4,
-                        7, 6, 4,
+                        // BOTTOM (4,5,6,7)
+                        4, 5, 6,
+                        4, 6, 7,
 
-                        // FRONT  (z = +d/2), normal = +Z
-                        //0, 1, 5,
-                        //0, 5, 4,
+                        // LEFT (8,9,10,11)
+                        9, 8, 11,
+                        9, 11, 10,
 
-                        // BACK   (z = -d/2), normal = -Z
-                        7, 3, 2,
-                        6, 7, 2,
+                        // RIGHT (12,13,14,15)
+                        12, 13, 14,
+                        12, 14, 15,
 
-                        // LEFT   (x = -w/2), normal = -X
-                        4, 0, 3,
-                        7, 4, 3,
-
-                        // RIGHT  (x = +w/2), normal = +X
-                        6, 2, 1,
-                        5, 6, 1
+                        // BACK (16,17,18,19)
+                        17, 16, 18,
+                        17, 18, 19
                 };
 
                 vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
-                        get_vbuff(), get_vbuff_size() * sizeof(glm::vec3), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+                        get_vbuff(), get_vbuff_size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
                 );
 
                 vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
@@ -526,10 +543,10 @@ public:
         }
 
 private:
-        glm::vec3 leftFaceColor   = glm::vec3(0.49f, 0.06f, 0.22f);
-        glm::vec3 rightFaceColor  = glm::vec3(0.00f, 0.13f, 0.31f);
         glm::vec3 topFaceColor    = glm::vec3(0.96f, 0.93f, 0.85f);
         glm::vec3 bottomFaceColor = glm::vec3(0.64f, 0.64f, 0.64f);
+        glm::vec3 leftFaceColor   = glm::vec3(0.49f, 0.06f, 0.22f);
+        glm::vec3 rightFaceColor  = glm::vec3(0.00f, 0.13f, 0.31f);
         glm::vec3 backFaceColor   = glm::vec3(0.76f, 0.74f, 0.68f);
 };
 
@@ -888,40 +905,66 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region custom graphics pipeline config
-    std::string vertexPath = gcgLoadShaderFilePath("assets/shader/testVertex.vert");
-    std::string fragPath = gcgLoadShaderFilePath("assets/shader/testFrag.frag");
-    
+    std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/testVertex.vert");
+    std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/testFrag.frag");
+
+    std::string cornellBox_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
+    std::string cornellBox_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
+
     // i could have used the same config... sry did not see that
-    auto populate_pipeline_configs = [&](VklGraphicsPipelineConfig& config, const bool wireframe_mode, const VkCullModeFlagBits cullMode) {
+    auto populate_pipeline_configs = [&](
+            VklGraphicsPipelineConfig& config
+
+            //const std::string& vertexShader,
+            //const std::string& fragmentShader,
+            
+            //const VkPolygonMode drawMode,
+            //const VkCullModeFlagBits cullMode
+            ) {
             config = {};
             
-            config.vertexShaderPath = vertexPath.c_str();
-            config.fragmentShaderPath = fragPath.c_str();
+            config.vertexShaderPath = vertexShader.c_str();
+            config.fragmentShaderPath = fragmentShader.c_str();
     
             // wireframe or not
-            if (wireframe_mode) config.polygonDrawMode = VK_POLYGON_MODE_LINE;
-            else config.polygonDrawMode = VK_POLYGON_MODE_FILL;
+            config.polygonDrawMode = drawMode;
 
             // cull mode
             config.triangleCullingMode = cullMode;
 
+            // layout of my vertex buffer
             config.vertexInputBuffers.resize(1, {});
-            config.vertexInputBuffers[0].binding = 0;
-            config.vertexInputBuffers[0].stride = 3 * sizeof(float);
-            config.vertexInputBuffers[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+            config.vertexInputBuffers[0] = {
+                0,                              // .binding 
+                sizeof(Vertex),                 // .stride 
+                VK_VERTEX_INPUT_RATE_VERTEX     // .inputRate 
+            };
 
-            config.inputAttributeDescriptions.resize(1, {});
-            config.inputAttributeDescriptions[0].location = 0;
-            config.inputAttributeDescriptions[0].binding = 0;
-            config.inputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-            config.inputAttributeDescriptions[0].offset = 0;
+            // on location 0 in my vertex buffer
+            config.inputAttributeDescriptions.resize(2, {});
+            config.inputAttributeDescriptions[0] = {
+                0,                                   // .location 
+                0,                                   // .binding 
+                VK_FORMAT_R32G32B32_SFLOAT,          // .format 
+                offsetof(Vertex, pos)                // .offset 
+            };
 
+            config.inputAttributeDescriptions[1] = {
+                1,                                   // .location 
+                0,                                   // .binding 
+                VK_FORMAT_R32G32B32_SFLOAT,          // .format 
+                offsetof(Vertex, color)              // .offset 
+            };
+
+            // ubo setup
             config.descriptorLayout.resize(1, {});
-            config.descriptorLayout[0].binding = 0;
-            config.descriptorLayout[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            config.descriptorLayout[0].descriptorCount = 1;
-            config.descriptorLayout[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-            config.descriptorLayout[0].pImmutableSamplers = nullptr;
+            config.descriptorLayout[0] = {
+                0,                                                              // .binding 
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
+                1,                                                              // .descriptorCount 
+                VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
+                nullptr                                                         // .pImmutableSamplers 
+            };
     };
 
     VklGraphicsPipelineConfig config_wire_cullNone;
