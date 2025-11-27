@@ -913,14 +913,13 @@ int main(int argc, char** argv) {
 
     // i could have used the same config... sry did not see that
     auto populate_pipeline_configs = [&](
-            VklGraphicsPipelineConfig& config
+            VklGraphicsPipelineConfig& config,
 
-            //const std::string& vertexShader,
-            //const std::string& fragmentShader,
+            const std::string& vertexShader,
+            const std::string& fragmentShader,
             
-            //const VkPolygonMode drawMode,
-            //const VkCullModeFlagBits cullMode
-            ) {
+            const VkPolygonMode drawMode,
+            const VkCullModeFlagBits cullMode) {
             config = {};
             
             config.vertexShaderPath = vertexShader.c_str();
@@ -966,6 +965,11 @@ int main(int argc, char** argv) {
                 nullptr                                                         // .pImmutableSamplers 
             };
     };
+
+    // returns a vector of pipelines in this order
+    auto pipeine_factory = []() {};
+    // based on the rendering parameters choose a suitable pipeline (returns a refference to that pipeline)
+    auto choose_pipeline = []() {};
 
     VklGraphicsPipelineConfig config_wire_cullNone;
     populate_pipeline_configs(config_wire_cullNone, true, VK_CULL_MODE_NONE);
