@@ -380,7 +380,7 @@ public:
         glm::mat4 get_proj_view_matrix(const double deltax = 0, const double deltay = 0) {
                 // arcball
                 if (left_mouse_btn_pressed) {
-                        camera_yaw -= deltax * arcball_sensitivity;
+                        camera_yaw += deltax * arcball_sensitivity;
                         camera_pitch += deltay * arcball_sensitivity;
 
                         const double pitchLimit = glm::radians(89.0);
@@ -449,9 +449,9 @@ private:
         
         void compute_camera_pos() {
                 camera_pos = target + camera_zoom_level * glm::normalize(glm::vec3(
-                        cos(camera_pitch) * sin(camera_yaw),
+                        cos(camera_pitch) * sin(-camera_yaw),
                         sin(camera_pitch),
-                        cos(camera_pitch) * cos(camera_yaw)
+                        cos(camera_pitch) * cos(-camera_yaw)
                 ));
         }
         glm::mat4 myLookAt() const {
@@ -476,7 +476,6 @@ private:
                 );
                 
                 return (orientation * translation);
-                //return glm::lookAt(camera_pos, target, up);
         }
 };
 
@@ -713,6 +712,7 @@ int main(int argc, char** argv) {
 #pragma region load camera settings
     // GCG framework stuff
     std::string init_camera_filepath = "assets/settings/camera_front.ini";
+    //std::string init_camera_filepath = "assets/settings/camera_front_right.ini";
     if (cmdline_args.init_camera)
         init_camera_filepath = cmdline_args.init_camera_filepath;
     
