@@ -595,10 +595,10 @@ public:
                         {origin + glm::vec3(width / 2,  height / 2, -depth / 2), rightFaceColor},
 
                         // back verts
-                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), backFaceColor},
-                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), backFaceColor},
-                        {origin + glm::vec3(-width / 2,  height / 2,  depth / 2), backFaceColor},
-                        {origin + glm::vec3( width / 2,  height / 2,  depth / 2), backFaceColor}
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), backFaceColor},
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), backFaceColor},
+                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), backFaceColor},
+                        {origin + glm::vec3( width / 2,  height / 2, -depth / 2), backFaceColor}
                 };
 
                 ibuff = {
@@ -619,8 +619,8 @@ public:
                         9, 10, 11,
 
                         // BACK (16,17,18,19)
-                        16, 17, 18,
-                        16, 18, 19
+                        16, 18, 17,
+                        16, 19, 18
                 };
 
                 vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
@@ -660,19 +660,19 @@ public:
 
         ObjectSettings& apply_rotation(float rads, const glm::vec3& rot) {
                 glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
-                ubo.object_matrix *= rotationMatrix;
+                ubo.object_matrix = rotationMatrix * ubo.object_matrix;
                 return *this;
         }
 
         ObjectSettings& apply_scale(const glm::vec3& scale) {
                 glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), scale);
-                ubo.object_matrix *= scaleMatrix;
+                ubo.object_matrix = scaleMatrix * ubo.object_matrix;
                 return *this;
         }
 
         ObjectSettings& apply_translation(const glm::vec3& tr) {
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), tr);
-                ubo.object_matrix *= translationMatrix;
+                ubo.object_matrix = translationMatrix * ubo.object_matrix;
                 return *this;
         }
         
@@ -1054,37 +1054,33 @@ int main(int argc, char** argv) {
 
     ObjectSettings ubo_builder;
 
-    UniformBufferObject ubo_teapot1 = ubo_builder
-            .set_color({ 0.49f, 0.06f, 0.22f, 1.0f })
-            .apply_rotation((float)glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f))
-            .apply_translation(glm::vec3(-1.0f, -1.0f, 0.0f))
+    UniformBufferObject ubo_cube = ubo_builder
+            .set_color({ 0.75f, 0.25f, 0.01f, 1.0f })
+            .apply_rotation((float)glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f))
             .get_ubo();
-    glm::mat4 model1 = ubo_teapot1.object_matrix;
-    ubo_teapot1.object_matrix = main_camera.get_proj_view_matrix() * ubo_teapot1.object_matrix;
+    glm::mat4 model1 = ubo_cube.object_matrix;
+    ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * ubo_cube.object_matrix;
 
     ubo_builder.reset();
 
-    UniformBufferObject ubo_teapot2 = ubo_builder
-            .set_color({ 0.0f, 0.13f, 0.31f, 1.0f })
-            .apply_scale(glm::vec3(1.0f, 2.0f, 1.0f))
-            .apply_translation(glm::vec3(1.5f, 1.0f, 0.0f))
+    UniformBufferObject ubo_cornellBox = ubo_builder
             .get_ubo();
-    glm::mat4 model2 = ubo_teapot2.object_matrix;
-    ubo_teapot2.object_matrix = main_camera.get_proj_view_matrix() * ubo_teapot2.object_matrix;
+    glm::mat4 model2 = ubo_cornellBox.object_matrix;
+    ubo_cornellBox.object_matrix = main_camera.get_proj_view_matrix() * ubo_cornellBox.object_matrix;
     
     VkBuffer uniform_buffer1 = vklCreateHostCoherentBufferWithBackingMemory(
-        sizeof(ubo_teapot1), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+        sizeof(ubo_cube), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
     );
-    vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_teapot1, sizeof(ubo_teapot1));
+    vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_cube, sizeof(ubo_cube));
 
     VkBuffer uniform_buffer2 = vklCreateHostCoherentBufferWithBackingMemory(
-        sizeof(ubo_teapot2), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+        sizeof(ubo_cornellBox), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
     );
-    vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
+    vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_cornellBox, sizeof(ubo_cornellBox));
 #pragma endregion
     
-        Cube cube1 = Cube();
-        CornellBox cornellBox = CornellBox();
+        Cube cube1 = Cube(2, 1.3, 1.3);
+        CornellBox cornellBox = CornellBox(3, 3, 3);
 
 
 #pragma region Uniform buffer
@@ -1109,7 +1105,7 @@ int main(int argc, char** argv) {
     layoutBinding.binding = 0;
     layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     layoutBinding.descriptorCount = 1;
-    layoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    layoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     layoutBinding.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
@@ -1142,7 +1138,7 @@ int main(int argc, char** argv) {
     VkDescriptorBufferInfo bufferInfo1 = {};
     bufferInfo1.buffer = uniform_buffer1; 
     bufferInfo1.offset = 0;
-    bufferInfo1.range = sizeof(ubo_teapot1);
+    bufferInfo1.range = sizeof(ubo_cube);
 
     VkWriteDescriptorSet write1 = {};
     write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1160,7 +1156,7 @@ int main(int argc, char** argv) {
     VkDescriptorBufferInfo bufferInfo2 = {};
     bufferInfo2.buffer = uniform_buffer2;
     bufferInfo2.offset = 0;
-    bufferInfo2.range = sizeof(ubo_teapot2);
+    bufferInfo2.range = sizeof(ubo_cornellBox);
 
     VkWriteDescriptorSet write2 = {};
     write2.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1185,43 +1181,27 @@ int main(int argc, char** argv) {
 
         vklWaitForNextSwapchainImage();
         
+        // reset camera to original pos and zoom it if needed
         if (reset_camera) main_camera.reset_camera_state();
         main_camera.update_camera_zoom(scroll_delta); scroll_delta = 0;
 
+        // move camera logic
         double deltax = {}; double deltay = {}; get_mouse_delta(window, deltax, deltay);
         glm::mat4 proj_view = main_camera.get_proj_view_matrix(deltax, deltay);
         
-        ubo_teapot1.object_matrix = proj_view * model1;
-        vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_teapot1, sizeof(ubo_teapot1));
+        ubo_cube.object_matrix = proj_view * model1;
+        vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_cube, sizeof(ubo_cube));
 
-        ubo_teapot2.object_matrix = proj_view * model2;
-        vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
+        ubo_cornellBox.object_matrix = proj_view * model2;
+        vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
         vklStartRecordingCommands();
         
-        // select right pipeline
-        //VkPipeline* vk_pipeline = nullptr;
-        //if (wireframe_mode) {
-        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) vk_pipeline = &vk_pipeline_wire_cullNone;
-        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_wire_cullFront;
-        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_wire_cullBack;
-        //}
-        //else {
-        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) vk_pipeline = &vk_pipeline_fill_cullNone;
-        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_fill_cullFront;
-        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_fill_cullBack;
-        //}
-        
-        //alexd_drawTeapot(*vk_pipeline, descriptorSet1);
-        //alexd_drawTeapot(*vk_pipeline, descriptorSet2);
-
         VkPipeline vk_pipeline = choose_pipeline(cubePipelines);
         alexd_drawCube(vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
-        alexd_drawCube(vk_pipeline, descriptorSet2, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
 
-        //VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
-        //alexd_drawCube(cornellPipeline, descriptorSet1, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
-        
+        VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
+        alexd_drawCube(cornellPipeline, descriptorSet2, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
