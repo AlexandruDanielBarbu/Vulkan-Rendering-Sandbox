@@ -79,7 +79,13 @@ void errorCallbackFromGlfw(int error, const char* description) { std::cout << "G
 #pragma endregion
 
 #pragma region alexd custom callbacks
+struct Vertex {
+        glm::vec3 pos;
+        glm::vec3 color;
+};
+
 bool reset_camera = false;
+
 bool wireframe_mode = false;
 std::vector<size_t> cullModes = {
     VK_CULL_MODE_NONE,
@@ -87,6 +93,7 @@ std::vector<size_t> cullModes = {
     VK_CULL_MODE_BACK_BIT
 };
 size_t selectedCullMode = 0;
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
@@ -239,6 +246,113 @@ void alexd_drawCube(const VkPipeline vk_pipeline, const VkDescriptorSet& descrip
         vkCmdDrawIndexed(commandBuffer, numIndices, 1, 0, 0, 0);
 }
 
+void populate_pipeline_configs(
+        VklGraphicsPipelineConfig& config,
+
+        const std::string& vertexShader,
+        const std::string& fragmentShader,
+
+        const VkPolygonMode drawMode,
+        const VkCullModeFlagBits cullMode)
+{
+        config = {};
+
+        config.vertexShaderPath = vertexShader.c_str();
+        config.fragmentShaderPath = fragmentShader.c_str();
+
+        // wireframe or not
+        config.polygonDrawMode = drawMode;
+
+        // cull mode
+        config.triangleCullingMode = cullMode;
+
+        // layout of my vertex buffer
+        config.vertexInputBuffers.resize(1, {});
+        config.vertexInputBuffers[0] = {
+                0,                              // .binding 
+                sizeof(Vertex),                 // .stride 
+                VK_VERTEX_INPUT_RATE_VERTEX     // .inputRate 
+        };
+
+        // on location 0 in my vertex buffer
+        config.inputAttributeDescriptions.resize(2, {});
+        config.inputAttributeDescriptions[0] = {
+                0,                                   // .location 
+                0,                                   // .binding 
+                VK_FORMAT_R32G32B32_SFLOAT,          // .format 
+                offsetof(Vertex, pos)                // .offset 
+        };
+
+        config.inputAttributeDescriptions[1] = {
+                1,                                   // .location 
+                0,                                   // .binding 
+                VK_FORMAT_R32G32B32_SFLOAT,          // .format 
+                offsetof(Vertex, color)              // .offset 
+        };
+
+        // ubo setup
+        config.descriptorLayout.resize(1, {});
+        config.descriptorLayout[0] = {
+                0,                                                              // .binding 
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
+                1,                                                              // .descriptorCount 
+                VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
+                nullptr                                                         // .pImmutableSamplers 
+        };
+}
+
+std::vector<VkPipeline> pipeline_factory(
+        const std::string& vertexShader,
+        const std::string& fragmentShader)
+{
+        std::vector<VkPolygonMode> drawMode = {
+                VK_POLYGON_MODE_FILL,
+                VK_POLYGON_MODE_LINE
+        };
+
+        std::vector<VkCullModeFlagBits> cullMode = {
+                VK_CULL_MODE_NONE,
+                VK_CULL_MODE_FRONT_BIT,
+                VK_CULL_MODE_BACK_BIT
+        };
+
+        std::vector<VkPipeline> pipelines;
+
+        for (auto dmode : drawMode) {
+                for (auto cmode : cullMode) {
+                        VklGraphicsPipelineConfig config = {};
+                        populate_pipeline_configs(config, vertexShader, fragmentShader, dmode, cmode);
+
+                        VkPipeline pipeline = vklCreateGraphicsPipeline(config);
+
+                        pipelines.push_back(pipeline);
+                }
+        }
+
+        return pipelines;
+}
+
+VkPipeline choose_pipeline(const std::vector<VkPipeline>& pipelines) {
+        if (!wireframe_mode) {
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) return pipelines[0];
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) return pipelines[1];
+                if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) return pipelines[2];
+                
+        }
+
+        if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) return pipelines[3];
+        if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) return pipelines[4];
+        if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) return pipelines[5];
+
+        return pipelines[0];
+}
+
+void destroy_pipelines(std::vector<VkPipeline>& pipelines) {
+        for (auto pipeline : pipelines) {
+                vklDestroyGraphicsPipeline(pipeline);
+        }
+}
+
 #pragma endregion
 
 #pragma region alexd defined classes
@@ -366,11 +480,6 @@ private:
         }
 };
 
-struct Vertex {
-        glm::vec3 pos;
-        glm::vec3 color;
-};
-
 class Object {
 public:
         const void* get_vbuff() const {
@@ -393,25 +502,6 @@ public:
         VkBuffer get_vk_ibuff() {
                 return vk_ibuff;
         };
-
-        //void apply_rotation(const float rads, const glm::vec3& rot) {
-        //        glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
-
-        //        object_matrix *= rotationMatrix;
-        //}
-        //void apply_scale(const glm::vec3& scale) {
-        //        glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), scale);
-
-        //        object_matrix *= scaleMatrix;
-        //}
-        //void apply_translation(const glm::vec3& tr) {
-        //        glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), tr);
-
-        //        object_matrix *= translationMatrix;
-        //}
-        //glm::mat4 get_object_matrix() {
-        //        return object_matrix;
-        //}
 
 protected:
         std::vector<Vertex> vbuff;
@@ -507,30 +597,30 @@ public:
                         // back verts
                         {origin + glm::vec3( width / 2, -height / 2,  depth / 2), backFaceColor},
                         {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), backFaceColor},
-                        {origin + glm::vec3( width / 2,  height / 2,  depth / 2), backFaceColor},
-                        {origin + glm::vec3( width / 2,  height / 2, -depth / 2), backFaceColor}
+                        {origin + glm::vec3(-width / 2,  height / 2,  depth / 2), backFaceColor},
+                        {origin + glm::vec3( width / 2,  height / 2,  depth / 2), backFaceColor}
                 };
 
                 ibuff = {
                         // TOP (0,1,2,3)
-                        1, 0, 3,
-                        1, 3, 2,
+                        1, 3, 0,
+                        1, 2, 3,
 
                         // BOTTOM (4,5,6,7)
-                        4, 5, 6,
-                        4, 6, 7,
+                        4, 6, 5,
+                        4, 7, 6,
 
-                        // LEFT (8,9,10,11)
-                        9, 8, 11,
-                        9, 11, 10,
-
-                        // RIGHT (12,13,14,15)
+                        // LEFT (12,13,14,15)
                         12, 13, 14,
                         12, 14, 15,
 
+                        // RIGHT (8,9,10,11)
+                        9, 11, 8,
+                        9, 10, 11,
+
                         // BACK (16,17,18,19)
-                        17, 16, 18,
-                        17, 18, 19
+                        16, 17, 18,
+                        16, 18, 19
                 };
 
                 vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
@@ -550,6 +640,57 @@ private:
         glm::vec3 backFaceColor   = glm::vec3(0.76f, 0.74f, 0.68f);
 };
 
+struct UniformBufferObject {
+        glm::vec4 color;
+        glm::mat4 object_matrix;
+};
+
+class ObjectSettings
+{
+public:
+        ObjectSettings() {
+                ubo.object_matrix = glm::mat4(1.0f);
+                ubo.color = glm::vec4(1.0f);
+        }
+
+        ObjectSettings& set_color(const glm::vec4& color) {
+                ubo.color = color;
+                return *this;
+        }
+
+        ObjectSettings& apply_rotation(float rads, const glm::vec3& rot) {
+                glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
+                ubo.object_matrix *= rotationMatrix;
+                return *this;
+        }
+
+        ObjectSettings& apply_scale(const glm::vec3& scale) {
+                glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), scale);
+                ubo.object_matrix *= scaleMatrix;
+                return *this;
+        }
+
+        ObjectSettings& apply_translation(const glm::vec3& tr) {
+                glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), tr);
+                ubo.object_matrix *= translationMatrix;
+                return *this;
+        }
+        
+        glm::mat4 get_object_matrix() {
+                return ubo.object_matrix;
+        }
+
+        UniformBufferObject get_ubo() {
+                return ubo;
+        }
+        
+        ObjectSettings& reset() {
+                ubo.object_matrix = glm::mat4(1.0f);
+                return *this;
+        }
+private:
+        UniformBufferObject ubo;
+};
 #pragma endregion
 
 int main(int argc, char** argv) {
@@ -593,9 +734,6 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma endregion
-
-    
-    glm::mat4 view_projection = main_camera.get_proj_view_matrix();
 
     // Install a callback function, which gets invoked whenever a GLFW error occurred.
     glfwSetErrorCallback(errorCallbackFromGlfw);
@@ -910,102 +1048,29 @@ int main(int argc, char** argv) {
 
     std::string cornellBox_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
     std::string cornellBox_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
-
-    // i could have used the same config... sry did not see that
-    auto populate_pipeline_configs = [&](
-            VklGraphicsPipelineConfig& config,
-
-            const std::string& vertexShader,
-            const std::string& fragmentShader,
-            
-            const VkPolygonMode drawMode,
-            const VkCullModeFlagBits cullMode) {
-            config = {};
-            
-            config.vertexShaderPath = vertexShader.c_str();
-            config.fragmentShaderPath = fragmentShader.c_str();
-    
-            // wireframe or not
-            config.polygonDrawMode = drawMode;
-
-            // cull mode
-            config.triangleCullingMode = cullMode;
-
-            // layout of my vertex buffer
-            config.vertexInputBuffers.resize(1, {});
-            config.vertexInputBuffers[0] = {
-                0,                              // .binding 
-                sizeof(Vertex),                 // .stride 
-                VK_VERTEX_INPUT_RATE_VERTEX     // .inputRate 
-            };
-
-            // on location 0 in my vertex buffer
-            config.inputAttributeDescriptions.resize(2, {});
-            config.inputAttributeDescriptions[0] = {
-                0,                                   // .location 
-                0,                                   // .binding 
-                VK_FORMAT_R32G32B32_SFLOAT,          // .format 
-                offsetof(Vertex, pos)                // .offset 
-            };
-
-            config.inputAttributeDescriptions[1] = {
-                1,                                   // .location 
-                0,                                   // .binding 
-                VK_FORMAT_R32G32B32_SFLOAT,          // .format 
-                offsetof(Vertex, color)              // .offset 
-            };
-
-            // ubo setup
-            config.descriptorLayout.resize(1, {});
-            config.descriptorLayout[0] = {
-                0,                                                              // .binding 
-                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
-                1,                                                              // .descriptorCount 
-                VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
-                nullptr                                                         // .pImmutableSamplers 
-            };
-    };
-
-    // returns a vector of pipelines in this order
-    auto pipeine_factory = []() {};
-    // based on the rendering parameters choose a suitable pipeline (returns a refference to that pipeline)
-    auto choose_pipeline = []() {};
-
-    VklGraphicsPipelineConfig config_wire_cullNone;
-    populate_pipeline_configs(config_wire_cullNone, true, VK_CULL_MODE_NONE);
-    VklGraphicsPipelineConfig config_wire_cullFront;
-    populate_pipeline_configs(config_wire_cullFront, true, VK_CULL_MODE_FRONT_BIT);
-    VklGraphicsPipelineConfig config_wire_cullBack;
-    populate_pipeline_configs(config_wire_cullBack, true, VK_CULL_MODE_BACK_BIT);
-
-
-    VklGraphicsPipelineConfig config_fill_cullNone;
-    populate_pipeline_configs(config_fill_cullNone, false, VK_CULL_MODE_NONE);
-    VklGraphicsPipelineConfig config_fill_cullFront;
-    populate_pipeline_configs(config_fill_cullFront, false, VK_CULL_MODE_FRONT_BIT);
-    VklGraphicsPipelineConfig config_fill_cullBack;
-    populate_pipeline_configs(config_fill_cullBack, false, VK_CULL_MODE_BACK_BIT);
 #pragma endregion
 
 #pragma region uniform buffer struct
-    struct UniformBufferObject {
-        glm::vec4 color;
-        glm::mat4 view_proj;
-    };
 
-    UniformBufferObject ubo_teapot1 = {};
-    ubo_teapot1.color = { 0.49f, 0.06f, 0.22f, 1.0f };
-    glm::mat4 rotate1 = glm::rotate(glm::mat4(1.0f), (float)glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 translate1 = glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, -1.0f, 0.0f));
-    glm::mat4 model1 = translate1 * rotate1;
-    ubo_teapot1.view_proj = view_projection * model1;
+    ObjectSettings ubo_builder;
 
-    UniformBufferObject ubo_teapot2 = {};
-    ubo_teapot2.color = { 0.0f, 0.13f, 0.31f, 1.0f };
-    glm::mat4 scale2 = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, 1.0f));
-    glm::mat4 translate2 = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 1.0f, 0.0f));
-    glm::mat4 model2 = translate2 * scale2;
-    ubo_teapot2.view_proj = view_projection * model2;
+    UniformBufferObject ubo_teapot1 = ubo_builder
+            .set_color({ 0.49f, 0.06f, 0.22f, 1.0f })
+            .apply_rotation((float)glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f))
+            .apply_translation(glm::vec3(-1.0f, -1.0f, 0.0f))
+            .get_ubo();
+    glm::mat4 model1 = ubo_teapot1.object_matrix;
+    ubo_teapot1.object_matrix = main_camera.get_proj_view_matrix() * ubo_teapot1.object_matrix;
+
+    ubo_builder.reset();
+
+    UniformBufferObject ubo_teapot2 = ubo_builder
+            .set_color({ 0.0f, 0.13f, 0.31f, 1.0f })
+            .apply_scale(glm::vec3(1.0f, 2.0f, 1.0f))
+            .apply_translation(glm::vec3(1.5f, 1.0f, 0.0f))
+            .get_ubo();
+    glm::mat4 model2 = ubo_teapot2.object_matrix;
+    ubo_teapot2.object_matrix = main_camera.get_proj_view_matrix() * ubo_teapot2.object_matrix;
     
     VkBuffer uniform_buffer1 = vklCreateHostCoherentBufferWithBackingMemory(
         sizeof(ubo_teapot1), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
@@ -1109,24 +1174,9 @@ int main(int argc, char** argv) {
     vkUpdateDescriptorSets(vk_device, 1, &write2, 0, nullptr);
 #pragma endregion
 
-    VkPipeline vk_pipeline_wire_cullNone = VK_NULL_HANDLE;
-    vk_pipeline_wire_cullNone = vklCreateGraphicsPipeline(config_wire_cullNone);
-    VkPipeline vk_pipeline_wire_cullFront = VK_NULL_HANDLE;
-    vk_pipeline_wire_cullFront = vklCreateGraphicsPipeline(config_wire_cullFront);
-    VkPipeline vk_pipeline_wire_cullBack = VK_NULL_HANDLE;
-    vk_pipeline_wire_cullBack = vklCreateGraphicsPipeline(config_wire_cullBack);
-
-    VkPipeline vk_pipeline_fill_cullNone = VK_NULL_HANDLE;
-    vk_pipeline_fill_cullNone = vklCreateGraphicsPipeline(config_fill_cullNone);
-    VkPipeline vk_pipeline_fill_cullFront = VK_NULL_HANDLE;
-    vk_pipeline_fill_cullFront = vklCreateGraphicsPipeline(config_fill_cullFront);
-    VkPipeline vk_pipeline_fill_cullBack = VK_NULL_HANDLE;
-    vk_pipeline_fill_cullBack = vklCreateGraphicsPipeline(config_fill_cullBack);
-
-    //if (vk_pipeline == VK_NULL_HANDLE) {
-    //    VKL_EXIT_WITH_ERROR("Failed to init the custom pipeline.");
-    //}
-
+    auto cornellPipelines = pipeline_factory(cornellBox_vertexShader_path, cornellBox_fragmentShader_path);
+    auto cubePipelines = pipeline_factory(cube_vertexShader_path, cube_fragmentShader_path);
+    
     vklEnablePipelineHotReloading(window, GLFW_KEY_F5);
 #pragma endregion
 
@@ -1141,34 +1191,36 @@ int main(int argc, char** argv) {
         double deltax = {}; double deltay = {}; get_mouse_delta(window, deltax, deltay);
         glm::mat4 proj_view = main_camera.get_proj_view_matrix(deltax, deltay);
         
-        ubo_teapot1.view_proj = proj_view * model1;
+        ubo_teapot1.object_matrix = proj_view * model1;
         vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_teapot1, sizeof(ubo_teapot1));
 
-        ubo_teapot2.view_proj = proj_view * model2;
+        ubo_teapot2.object_matrix = proj_view * model2;
         vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_teapot2, sizeof(ubo_teapot2));
         
         vklStartRecordingCommands();
         
         // select right pipeline
-        VkPipeline* vk_pipeline = nullptr;
-        if (wireframe_mode) {
-                if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) vk_pipeline = &vk_pipeline_wire_cullNone;
-                if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_wire_cullFront;
-                if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_wire_cullBack;
-        }
-        else {
-                if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) vk_pipeline = &vk_pipeline_fill_cullNone;
-                if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_fill_cullFront;
-                if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_fill_cullBack;
-        }
+        //VkPipeline* vk_pipeline = nullptr;
+        //if (wireframe_mode) {
+        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) vk_pipeline = &vk_pipeline_wire_cullNone;
+        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_wire_cullFront;
+        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_wire_cullBack;
+        //}
+        //else {
+        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_NONE) vk_pipeline = &vk_pipeline_fill_cullNone;
+        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_FRONT_BIT) vk_pipeline = &vk_pipeline_fill_cullFront;
+        //        if (cullModes[selectedCullMode] == VK_CULL_MODE_BACK_BIT) vk_pipeline = &vk_pipeline_fill_cullBack;
+        //}
         
         //alexd_drawTeapot(*vk_pipeline, descriptorSet1);
         //alexd_drawTeapot(*vk_pipeline, descriptorSet2);
 
-        //alexd_drawCube(*vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
-        //alexd_drawCube(*vk_pipeline, descriptorSet2, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
+        VkPipeline vk_pipeline = choose_pipeline(cubePipelines);
+        alexd_drawCube(vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
+        alexd_drawCube(vk_pipeline, descriptorSet2, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
 
-        alexd_drawCube(*vk_pipeline, descriptorSet1, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
+        //VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
+        //alexd_drawCube(cornellPipeline, descriptorSet1, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
         
         
         vklEndRecordingCommands();
@@ -1195,13 +1247,8 @@ int main(int argc, char** argv) {
 #pragma region cleanup
     vkDeviceWaitIdle(vk_device);
 
-    vklDestroyGraphicsPipeline(vk_pipeline_wire_cullNone);
-    vklDestroyGraphicsPipeline(vk_pipeline_wire_cullFront);
-    vklDestroyGraphicsPipeline(vk_pipeline_wire_cullBack);
-
-    vklDestroyGraphicsPipeline(vk_pipeline_fill_cullNone);
-    vklDestroyGraphicsPipeline(vk_pipeline_fill_cullFront);
-    vklDestroyGraphicsPipeline(vk_pipeline_fill_cullBack);
+    destroy_pipelines(cornellPipelines);
+    destroy_pipelines(cubePipelines);
 
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
