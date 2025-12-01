@@ -13,6 +13,7 @@
 
 #include <vector>
 
+const float PI = glm::pi<float>();
 
 #undef min
 #undef max
@@ -224,7 +225,7 @@ void alexd_drawTeapot(const VkPipeline vk_pipeline, const VkDescriptorSet& descr
         vkCmdDrawIndexed(commandBuffer, numTeapotIndices, 1, 0, 0, 0);
 }
 
-void alexd_drawCube(const VkPipeline vk_pipeline, const VkDescriptorSet& descriptorSet, const VkBuffer cube_vbuff, const VkBuffer cube_ibuff, const uint32_t numIndices) {
+void alexd_drawObject(const VkPipeline vk_pipeline, const VkDescriptorSet& descriptorSet, const VkBuffer object_vbuff, const VkBuffer object_ibuff, const uint32_t numIndices) {
         // command buffer and pipeline layout
         VkCommandBuffer commandBuffer = vklGetCurrentCommandBuffer();
         VkPipelineLayout pipelineLayout = vklGetLayoutForPipeline(vk_pipeline);
@@ -237,10 +238,10 @@ void alexd_drawCube(const VkPipeline vk_pipeline, const VkDescriptorSet& descrip
 
         // bind vertex buffer
         VkDeviceSize  offsets[] = { 0 };
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &cube_vbuff, offsets);
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &object_vbuff, offsets);
 
         // bind vertex index buffer
-        vkCmdBindIndexBuffer(commandBuffer, cube_ibuff, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(commandBuffer, object_ibuff, 0, VK_INDEX_TYPE_UINT32);
 
         // draw
         vkCmdDrawIndexed(commandBuffer, numIndices, 1, 0, 0, 0);
@@ -502,6 +503,10 @@ public:
                 return vk_ibuff;
         };
 
+        void destroyVkBuffers() {
+                vklDestroyHostCoherentBufferAndItsBackingMemory(vk_vbuff);
+                vklDestroyHostCoherentBufferAndItsBackingMemory(vk_ibuff);
+        }
 protected:
         std::vector<Vertex> vbuff;
         std::vector<uint32_t> ibuff;
@@ -639,6 +644,115 @@ private:
         glm::vec3 backFaceColor   = glm::vec3(0.76f, 0.74f, 0.68f);
 };
 
+class Cylinder : public Object {
+public:
+        Cylinder(const float radius = 1.0f, const float height = 1.0f, const int subdivisions = 10, const glm::vec3& origin = {0, 0, 0}) {
+                float step = (2 * PI) / subdivisions;
+                
+                // Top vert
+                vbuff.push_back({ origin + glm::vec3(0, height / 2, 0), {} });
+
+                // Top ring
+                for (int i = 0; i < subdivisions; i++) {
+                        float phi = i * step;
+                        float x = radius * cos(phi);
+                        float z = radius * sin(phi);
+                        
+                        vbuff.push_back({ origin + glm::vec3(x, height / 2, z), {} });
+                }
+
+                // Bottom ring
+                for (int i = 0; i < subdivisions; i++) {
+                        float phi = i * step;
+                        float x = radius * cos(phi);
+                        float z = radius * sin(phi);
+
+                        vbuff.push_back({ origin + glm::vec3(x, -height / 2, z), {} });
+                }
+
+                // Bottom vert
+                vbuff.push_back({ origin + glm::vec3(0, -height / 2, 0), {} });
+
+
+                // Top face
+                for (int i = 1; i <= subdivisions; i++) {
+                        if (i != subdivisions) {
+                                ibuff.push_back(0);
+                                ibuff.push_back(i + 1);
+                                ibuff.push_back(i);
+                                continue;
+                        }
+
+                        // last triangle case
+                        ibuff.push_back(0);
+                        ibuff.push_back(1);
+                        ibuff.push_back(i);
+                }
+
+                // Bottom face
+                for (int i = 1; i <= subdivisions; i++) {
+                        if (i != subdivisions) {
+                                ibuff.push_back(2 * subdivisions + 1);
+                                ibuff.push_back(i + subdivisions);
+                                ibuff.push_back(i + 1 + subdivisions);
+                                continue;
+                        }
+                        
+                        // last triangle case
+                        ibuff.push_back(2 * subdivisions + 1);
+                        ibuff.push_back(i + subdivisions);
+                        ibuff.push_back(1 + subdivisions);
+                }
+
+                // Lateral faces
+                for (int i = 1; i <= subdivisions; i++) {
+                        if (i != subdivisions) {
+                                // triangle 1
+                                ibuff.push_back(i);
+                                ibuff.push_back(i + 1);
+                                ibuff.push_back(i + subdivisions);
+
+                                // triangle 2
+                                ibuff.push_back(i + 1);
+                                ibuff.push_back(i + 1 + subdivisions);
+                                ibuff.push_back(i + subdivisions);
+                                continue;
+                        }
+
+                        ibuff.push_back(i);
+                        ibuff.push_back(1);
+                        ibuff.push_back(i + subdivisions);
+
+                        ibuff.push_back(1);
+                        ibuff.push_back(1 + subdivisions);
+                        ibuff.push_back(i + subdivisions);
+                }
+
+                vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
+                        get_vbuff(), get_vbuff_size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+                );
+
+                vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
+                        get_ibuff(), get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+                );
+        }
+};
+
+class Sphere : public Object {
+public:
+        Sphere(const float radius = 1.0f, const int latitude_subdivisions = 10, const int longitude_subdivisions = 10, const glm::vec3& origin = {}) {
+                // top vert
+                // ring verts
+                // bottom vert
+
+                // top cap
+                // bottom cap
+                // lateral faces
+
+                // vk_vbuff
+                // vk_ibuff
+        }
+};
 struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
@@ -1056,7 +1170,7 @@ int main(int argc, char** argv) {
 
     UniformBufferObject ubo_cube = ubo_builder
             .set_color({ 0.75f, 0.25f, 0.01f, 1.0f })
-            .apply_rotation((float)glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f))
+            //.apply_rotation((float)glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f))
             .get_ubo();
     glm::mat4 model1 = ubo_cube.object_matrix;
     ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * ubo_cube.object_matrix;
@@ -1081,6 +1195,7 @@ int main(int argc, char** argv) {
     
         Cube cube1 = Cube(2, 1.3, 1.3);
         CornellBox cornellBox = CornellBox(3, 3, 3);
+        Cylinder cylinder = Cylinder();
 
 
 #pragma region Uniform buffer
@@ -1198,10 +1313,11 @@ int main(int argc, char** argv) {
         vklStartRecordingCommands();
         
         VkPipeline vk_pipeline = choose_pipeline(cubePipelines);
-        alexd_drawCube(vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
+        //alexd_drawObject(vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
+        alexd_drawObject(vk_pipeline, descriptorSet1, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
 
-        VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
-        alexd_drawCube(cornellPipeline, descriptorSet2, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
+        //VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
+        //alexd_drawObject(cornellPipeline, descriptorSet2, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
@@ -1233,11 +1349,9 @@ int main(int argc, char** argv) {
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
     
-    vklDestroyHostCoherentBufferAndItsBackingMemory(cube1.get_vk_vbuff());
-    vklDestroyHostCoherentBufferAndItsBackingMemory(cube1.get_vk_ibuff());
-    
-    vklDestroyHostCoherentBufferAndItsBackingMemory(cornellBox.get_vk_vbuff());
-    vklDestroyHostCoherentBufferAndItsBackingMemory(cornellBox.get_vk_ibuff());
+    cube1.destroyVkBuffers();
+    cornellBox.destroyVkBuffers();
+    cylinder.destroyVkBuffers();
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer2);
