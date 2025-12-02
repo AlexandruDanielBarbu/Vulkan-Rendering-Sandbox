@@ -514,6 +514,15 @@ protected:
         VkBuffer vk_vbuff;
         VkBuffer vk_ibuff;
 
+        void populate_VkBuffers() {
+                vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
+                        get_vbuff(), get_vbuff_size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+                );
+
+                vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
+                        get_ibuff(), get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+                );
+        }
         //glm::mat4 object_matrix = glm::mat4(1.0f);
 };
 
@@ -560,13 +569,7 @@ public:
                         1, 6, 5
                 };
         
-                vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
-                        get_vbuff(), get_vbuff_size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                );
-
-                vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
-                        get_ibuff(), get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-                );
+                populate_VkBuffers();
         }
 };
 
@@ -627,13 +630,7 @@ public:
                         16, 19, 18
                 };
 
-                vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
-                        get_vbuff(), get_vbuff_size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                );
-
-                vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
-                        get_ibuff(), get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-                );
+                populate_VkBuffers();
         }
 
 private:
@@ -728,31 +725,83 @@ public:
                         ibuff.push_back(i + subdivisions);
                 }
 
-                vk_vbuff = vklCreateHostCoherentBufferAndUploadData(
-                        get_vbuff(), get_vbuff_size() * sizeof(Vertex), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                );
-
-                vk_ibuff = vklCreateHostCoherentBufferAndUploadData(
-                        get_ibuff(), get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-                );
+                populate_VkBuffers();
         }
 };
 
 class Sphere : public Object {
 public:
         Sphere(const float radius = 1.0f, const int latitude_subdivisions = 10, const int longitude_subdivisions = 10, const glm::vec3& origin = {}) {
-                // top vert
-                // ring verts
+                float latitude_step = PI / latitude_subdivisions;
+                float longitude_step = (2 * PI) / longitude_subdivisions;
+
                 // bottom vert
+                vbuff.push_back({ origin + glm::vec3(0, radius, 0), {} });
+
+                // ring verts
+                for (int i = 1; i < latitude_subdivisions; i++) {
+                        float theta = i * latitude_step;
+
+                        for (int j = 0; j < longitude_subdivisions; j++) {
+                                float phi = j * longitude_step;
+
+                                vbuff.push_back({ origin + glm::vec3(
+                                        radius * sin(theta) * cos(phi),
+                                        radius * cos(theta),
+                                        radius * sin(theta) * sin(phi)),
+                                        {}});
+                        }
+                }
+
+                // top vert
+                vbuff.push_back({ origin + glm::vec3(0, -radius, 0), {} });
+
+
+                // bottom cap
+                for (int j = 0; j < longitude_subdivisions; j++) {
+                        int jNext = (j + 1) % longitude_subdivisions;
+                        ibuff.push_back(0);
+                        ibuff.push_back(1 + jNext);
+                        ibuff.push_back(1 + j);
+                }
+
+                // lateral faces
+                // nasty mesh bug if i let this loop run up to  `< latitude_subdivisions - 1`
+                for (int i = 0; i < latitude_subdivisions - 2; i++) {
+                        int ringStart = 1 + i * longitude_subdivisions;
+                        int nextRingStart = ringStart + longitude_subdivisions;
+
+                        for (int j = 0; j < longitude_subdivisions; j++) {
+                                int jNext = (j + 1) % longitude_subdivisions;
+
+                                // Triangle 1
+                                ibuff.push_back(ringStart + j);
+                                ibuff.push_back(ringStart + jNext);
+                                ibuff.push_back(nextRingStart + j);
+
+                                // Triangle 2
+                                ibuff.push_back(ringStart + jNext);
+                                ibuff.push_back(nextRingStart + jNext);
+                                ibuff.push_back(nextRingStart + j);
+                        }
+                }
+
 
                 // top cap
-                // bottom cap
-                // lateral faces
+                int top_vert = vbuff.size() - 1;
+                int top_ring_start = top_vert - longitude_subdivisions;
 
-                // vk_vbuff
-                // vk_ibuff
+                for (int j = 0; j < longitude_subdivisions; j++) {
+                        int jNext = top_ring_start + (j + 1) % longitude_subdivisions;
+                        ibuff.push_back(top_vert);
+                        ibuff.push_back(top_ring_start + j);
+                        ibuff.push_back(jNext);
+                }
+
+                populate_VkBuffers();
         }
 };
+
 struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
@@ -1196,6 +1245,7 @@ int main(int argc, char** argv) {
         Cube cube1 = Cube(2, 1.3, 1.3);
         CornellBox cornellBox = CornellBox(3, 3, 3);
         Cylinder cylinder = Cylinder();
+        Sphere sphere = Sphere();
 
 
 #pragma region Uniform buffer
@@ -1314,7 +1364,8 @@ int main(int argc, char** argv) {
         
         VkPipeline vk_pipeline = choose_pipeline(cubePipelines);
         //alexd_drawObject(vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
-        alexd_drawObject(vk_pipeline, descriptorSet1, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
+        //alexd_drawObject(vk_pipeline, descriptorSet1, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
+        alexd_drawObject(vk_pipeline, descriptorSet1, sphere.get_vk_vbuff(), sphere.get_vk_ibuff(), static_cast<uint32_t>(sphere.get_ibuff_size()));
 
         //VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
         //alexd_drawObject(cornellPipeline, descriptorSet2, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
@@ -1352,6 +1403,7 @@ int main(int argc, char** argv) {
     cube1.destroyVkBuffers();
     cornellBox.destroyVkBuffers();
     cylinder.destroyVkBuffers();
+    sphere.destroyVkBuffers();
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer2);
