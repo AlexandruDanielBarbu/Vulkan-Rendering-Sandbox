@@ -802,6 +802,148 @@ public:
         }
 };
 
+class Bezier : public Object {
+public:
+        Bezier(std::vector<glm::vec3>& controlPoints, const float radius, const int segments, const int subdivisions) {
+                // first control point is also the first point on the curve
+                vbuff.push_back({ controlPoints[0], {} });
+
+                // generate rings
+                float step = 1.0f / segments;
+                for (int i = 0; i <= segments; i++) {
+                        float t = i * step;
+
+                        // generate point on curve
+                        glm::vec3 circle_origin = DeCasteljau(controlPoints, t);
+                        glm::vec3 tangent = glm::normalize(derivateBezierCurve(controlPoints, t));
+
+                        char strongestAxis = 'x';
+                        if (abs(tangent.x) > abs(tangent.y))
+                                if (abs(tangent.x) > abs(tangent.z))
+                                        strongestAxis = 'x';
+                                else
+                                        strongestAxis = 'z';
+                        else if (abs(tangent.y) > abs(tangent.z))
+                                strongestAxis = 'y';
+                        else
+                                strongestAxis = 'z';
+
+                        // get my local axis
+                        glm::vec3 up, forward, right;
+
+                        switch (strongestAxis) {
+                        case 'x':
+                        case 'y':
+                                up = tangent;
+                                forward = glm::vec3(0, 0, 1);
+                                right = glm::normalize(glm::cross(up, forward));
+                                forward = glm::normalize(glm::cross(right, up));
+                                break;
+
+                        // might fail with up = glm::vec3(0,0,0) but it's ok for now
+                        case 'z':
+                                up = tangent;
+                                right = glm::vec3(0, 0, 1);
+                                forward = glm::normalize(glm::cross(right, up));
+                                right = glm::normalize(glm::cross(up, forward));
+                                break;
+                        default:
+                                break;
+                        };
+
+                        // generate circle in the new x'o'z' plane
+                        float vertStep = (2 * PI) / subdivisions;
+                        for (int vertCount = 0; vertCount < subdivisions; vertCount++) {
+                                float phi = vertCount * vertStep;
+                                
+                                glm::vec3 point(
+                                        radius * cos(phi),
+                                        0,
+                                        radius * sin(phi)
+                                );
+
+                                glm::mat3 orientation(right, up, forward);
+
+                                point = orientation * point;
+
+                                point += circle_origin;
+
+                                vbuff.push_back({ point, {} });
+                        }
+                }
+
+                // final point to close the cylinder
+                vbuff.push_back({ controlPoints[controlPoints.size() - 1], {} });
+        
+                // top face
+                for (int i = 0; i < subdivisions; i++) {
+                        int iNext = (i + 1) % subdivisions;
+                        ibuff.push_back(0);
+                        ibuff.push_back(1 + i);
+                        ibuff.push_back(1 + iNext);
+                }
+
+                // lateral faces
+                // nasty mesh bug if i let this loop run up to  `< latitude_subdivisions - 1`
+                for (int i = 0; i < segments; i++) {
+                        int ringStart = 1 + i * subdivisions;
+                        int nextRingStart = 1 + (i + 1) * subdivisions;
+
+                        for (int j = 0; j < subdivisions; j++) {
+                                int jNext = (j + 1) % subdivisions;
+
+                                // Triangle 1
+                                ibuff.push_back(ringStart + j);
+                                ibuff.push_back(nextRingStart + j);
+                                ibuff.push_back(ringStart + jNext);
+
+                                // Triangle 2
+                                ibuff.push_back(ringStart + jNext);
+                                ibuff.push_back(nextRingStart + j);
+                                ibuff.push_back(nextRingStart + jNext);
+                        }
+                }
+
+                // bottom face
+                int last_vert = vbuff.size() - 1;
+                int last_ring_start = last_vert - subdivisions;
+
+                for (int j = 0; j < subdivisions; j++) {
+                        int jNext = last_ring_start + (j + 1) % subdivisions;
+                        ibuff.push_back(last_vert);
+                        ibuff.push_back(jNext);
+                        ibuff.push_back(last_ring_start + j);
+                }
+
+                populate_VkBuffers();
+        }
+private:
+        // https://www.scratchapixel.com/lessons/geometry/bezier-curve-rendering-utah-teapot/curves-as-geometry.html
+        // DeCasteljau(t) -- does the alg for a nominated t
+        glm::vec3 DeCasteljau(std::vector<glm::vec3>& og_points, const float t) {
+                std::vector<glm::vec3> points = og_points;
+
+                int n = og_points.size();
+                for (int k = n - 1; k > 0; k--) {
+                        for (int i = 0; i < k; i++) {
+                                points[i] = points[i] * (1.0f - t) + points[i + 1] * t;
+                        }
+                }
+
+                return points[0];
+        }
+
+        glm::vec3 derivateBezierCurve(std::vector<glm::vec3>& og_points, const float t) {
+                int n = og_points.size() - 1;
+                std::vector<glm::vec3> d_points(n);
+                
+                for (int i = 0; i < n; i++) {
+                        d_points[i] = static_cast<float>(n) * (og_points[i + 1] - og_points[i]);
+                }
+
+                return DeCasteljau(d_points, t);
+        }
+};
 struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
@@ -856,396 +998,407 @@ private:
 #pragma endregion
 
 int main(int argc, char** argv) {
-    VKL_LOG(WELCOME_MSG);
+        VKL_LOG(WELCOME_MSG);
 
-    CMDLineArgs cmdline_args;
-    gcgParseArgs(cmdline_args, argc, argv);
+        CMDLineArgs cmdline_args;
+        gcgParseArgs(cmdline_args, argc, argv);
 
 #pragma region App settings
 
 #pragma region load window settings
-    INIReader window_reader("assets/settings/window.ini");
-    int window_width = window_reader.GetInteger("window", "width", 800);
-    int window_height = window_reader.GetInteger("window", "height", 800);
-    bool fullscreen = false;
-    std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
+        INIReader window_reader("assets/settings/window.ini");
+        int window_width = window_reader.GetInteger("window", "width", 800);
+        int window_height = window_reader.GetInteger("window", "height", 800);
+        bool fullscreen = false;
+        std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
 #pragma endregion
 
 
 #pragma region load camera settings
-    // GCG framework stuff
-    std::string init_camera_filepath = "assets/settings/camera_front.ini";
-    //std::string init_camera_filepath = "assets/settings/camera_front_right.ini";
-    if (cmdline_args.init_camera)
-        init_camera_filepath = cmdline_args.init_camera_filepath;
-    
-    Camera main_camera(init_camera_filepath, window_width, window_height);
+        // GCG framework stuff
+        std::string init_camera_filepath = "assets/settings/camera_front.ini";
+        //std::string init_camera_filepath = "assets/settings/camera_front_right.ini";
+        if (cmdline_args.init_camera)
+                init_camera_filepath = cmdline_args.init_camera_filepath;
+
+        Camera main_camera(init_camera_filepath, window_width, window_height);
 #pragma endregion
 
 
 #pragma region load render settings
-    std::string init_renderer_filepath = "assets/settings/renderer_standard.ini";
-    if (cmdline_args.init_renderer) {
-            init_renderer_filepath = cmdline_args.init_renderer_filepath;
-    }
+        std::string init_renderer_filepath = "assets/settings/renderer_standard.ini";
+        if (cmdline_args.init_renderer) {
+                init_renderer_filepath = cmdline_args.init_renderer_filepath;
+        }
 
-    INIReader renderer_reader(init_renderer_filepath);
-    wireframe_mode = renderer_reader.GetBoolean("renderer", "wireframe", false);
-    bool with_backface_culling = renderer_reader.GetBoolean("renderer",
-            "backface_culling", false);
-    if (with_backface_culling) selectedCullMode = 2;
+        INIReader renderer_reader(init_renderer_filepath);
+        wireframe_mode = renderer_reader.GetBoolean("renderer", "wireframe", false);
+        bool with_backface_culling = renderer_reader.GetBoolean("renderer",
+                "backface_culling", false);
+        if (with_backface_culling) selectedCullMode = 2;
 #pragma endregion
 
 #pragma endregion
 
-    // Install a callback function, which gets invoked whenever a GLFW error occurred.
-    glfwSetErrorCallback(errorCallbackFromGlfw);
+        // Install a callback function, which gets invoked whenever a GLFW error occurred.
+        glfwSetErrorCallback(errorCallbackFromGlfw);
 
 #pragma region GLFW window setup
-    if (!glfwInit()) {
-        VKL_EXIT_WITH_ERROR("Failed to init GLFW");
-    }
+        if (!glfwInit()) {
+                VKL_EXIT_WITH_ERROR("Failed to init GLFW");
+        }
 
-    // below line deactivates some OpenGl/OpenGl SE stuff
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        // below line deactivates some OpenGl/OpenGl SE stuff
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    // Use a monitor if we'd like to open the window in fullscreen mode:
-    GLFWmonitor* monitor = nullptr;
-    if (fullscreen) {
-        monitor = glfwGetPrimaryMonitor();
-    }
+        // Use a monitor if we'd like to open the window in fullscreen mode:
+        GLFWmonitor* monitor = nullptr;
+        if (fullscreen) {
+                monitor = glfwGetPrimaryMonitor();
+        }
 
-    // Get a valid window handle and assign to window
-    GLFWwindow* window = glfwCreateWindow(window_width, window_height, window_title.c_str(), monitor, nullptr);
-    if (!window) {
-        VKL_EXIT_WITH_ERROR("No GLFW window created.");
-    }
+        // Get a valid window handle and assign to window
+        GLFWwindow* window = glfwCreateWindow(window_width, window_height, window_title.c_str(), monitor, nullptr);
+        if (!window) {
+                VKL_EXIT_WITH_ERROR("No GLFW window created.");
+        }
 #pragma endregion
 
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetMouseButtonCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
+        glfwSetKeyCallback(window, key_callback);
+        glfwSetMouseButtonCallback(window, mouse_callback);
+        glfwSetScrollCallback(window, scroll_callback);
 
 #pragma region my vulkan related variables
-    VkResult result;
-    VkInstance vk_instance = VK_NULL_HANDLE;              // To be set during Subtask 1.3
-    VkSurfaceKHR vk_surface = VK_NULL_HANDLE;             // To be set during Subtask 1.4
-    VkPhysicalDevice vk_physical_device = VK_NULL_HANDLE; // To be set during Subtask 1.5
-    VkDevice vk_device = VK_NULL_HANDLE;                  // To be set during Subtask 1.7
-    VkQueue vk_queue = VK_NULL_HANDLE;                    // To be set during Subtask 1.7
-    VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;         // To be set during Subtask 1.8
+        VkResult result;
+        VkInstance vk_instance = VK_NULL_HANDLE;              // To be set during Subtask 1.3
+        VkSurfaceKHR vk_surface = VK_NULL_HANDLE;             // To be set during Subtask 1.4
+        VkPhysicalDevice vk_physical_device = VK_NULL_HANDLE; // To be set during Subtask 1.5
+        VkDevice vk_device = VK_NULL_HANDLE;                  // To be set during Subtask 1.7
+        VkQueue vk_queue = VK_NULL_HANDLE;                    // To be set during Subtask 1.7
+        VkSwapchainKHR vk_swapchain = VK_NULL_HANDLE;         // To be set during Subtask 1.8
 #pragma endregion
 
 #pragma region vulkan instance
 
 #pragma region vk application info
-    VkApplicationInfo application_info = {};                     
-    application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO; 
-    application_info.pEngineName = "GCG_VK_Library";             
-    application_info.engineVersion = VK_MAKE_API_VERSION(0, 2023, 9, 1);
-    application_info.pApplicationName = "GCG_VK_Solution";
-    application_info.applicationVersion = VK_MAKE_API_VERSION(0, 2023, 9, 19);
-    application_info.apiVersion = VK_API_VERSION_1_1;  
+        VkApplicationInfo application_info = {};
+        application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        application_info.pEngineName = "GCG_VK_Library";
+        application_info.engineVersion = VK_MAKE_API_VERSION(0, 2023, 9, 1);
+        application_info.pApplicationName = "GCG_VK_Solution";
+        application_info.applicationVersion = VK_MAKE_API_VERSION(0, 2023, 9, 19);
+        application_info.apiVersion = VK_API_VERSION_1_1;
 #pragma endregion
 
-    VkInstanceCreateInfo instance_create_info = {};                      
-    instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO; 
-    instance_create_info.pApplicationInfo = &application_info;
+        VkInstanceCreateInfo instance_create_info = {};
+        instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        instance_create_info.pApplicationInfo = &application_info;
 
 #pragma region GLFW required extensions
-    uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        uint32_t glfwExtensionCount = 0;
+        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    if (glfwExtensions == nullptr) {
-        VKL_EXIT_WITH_ERROR("No GLFW extensions supported to display things around.");
-    }
+        if (glfwExtensions == nullptr) {
+                VKL_EXIT_WITH_ERROR("No GLFW extensions supported to display things around.");
+        }
 
-    std::vector<const char*> instance_extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-    instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        std::vector<const char*> instance_extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+        instance_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #pragma endregion
-    
+
 #pragma region supported extensions
-    uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-    
-    std::vector<VkExtensionProperties> extensions(extensionCount);
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+        uint32_t extensionCount = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+
+        std::vector<VkExtensionProperties> extensions(extensionCount);
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
 #pragma endregion
 
-    // Query if i support all extensions
-    for (const auto& glfwExtension : instance_extensions) {
-        bool isFound = false;
-        for (const auto& extension : extensions) {
-            if (strcmp(glfwExtension, extension.extensionName) == 0) {
-                isFound = true;
-                break;
-            }
-        }
-        if (!isFound)
-            VKL_EXIT_WITH_ERROR("One extension was not found.");
-    }
-
-    // Hook in required_extensions using VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames!
-    instance_create_info.enabledExtensionCount = static_cast<uint32_t>(instance_extensions.size());
-    instance_create_info.ppEnabledExtensionNames = instance_extensions.data();
-
-    // Hook in enabled_layers using VkInstanceCreateInfo::enabledLayerCount and VkInstanceCreateInfo::ppEnabledLayerNames!
-    instance_create_info.enabledLayerCount = 1;
-    const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
-    instance_create_info.ppEnabledLayerNames = layers;
-    
-    // Get supported Layers
-    uint32_t layerCount = 0;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-    
-    std::vector<VkLayerProperties> availableLayers(layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-    // Query if i support all layers
-    for (int i = 0; i < instance_create_info.enabledLayerCount; i++) {
-        bool isFound = false;
-        for (const auto& layer : availableLayers) {
-            if (strcmp(instance_create_info.ppEnabledLayerNames[i], layer.layerName) == 0) {
-                isFound = true;
-                break;
-            }
+        // Query if i support all extensions
+        for (const auto& glfwExtension : instance_extensions) {
+                bool isFound = false;
+                for (const auto& extension : extensions) {
+                        if (strcmp(glfwExtension, extension.extensionName) == 0) {
+                                isFound = true;
+                                break;
+                        }
+                }
+                if (!isFound)
+                        VKL_EXIT_WITH_ERROR("One extension was not found.");
         }
 
-        if (!isFound)
-            VKL_EXIT_WITH_ERROR("One layer was not found.");
-    }
-    
-    if (vkCreateInstance(&instance_create_info, nullptr, &vk_instance) != VK_SUCCESS)
-        VKL_EXIT_WITH_ERROR("Function vkCreateInstance failed.");
-    
-    if (!vk_instance)
-        VKL_EXIT_WITH_ERROR("No VkInstance created or handle not assigned.");
+        // Hook in required_extensions using VkInstanceCreateInfo::enabledExtensionCount and VkInstanceCreateInfo::ppEnabledExtensionNames!
+        instance_create_info.enabledExtensionCount = static_cast<uint32_t>(instance_extensions.size());
+        instance_create_info.ppEnabledExtensionNames = instance_extensions.data();
+
+        // Hook in enabled_layers using VkInstanceCreateInfo::enabledLayerCount and VkInstanceCreateInfo::ppEnabledLayerNames!
+        instance_create_info.enabledLayerCount = 1;
+        const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
+        instance_create_info.ppEnabledLayerNames = layers;
+
+        // Get supported Layers
+        uint32_t layerCount = 0;
+        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+        std::vector<VkLayerProperties> availableLayers(layerCount);
+        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+        // Query if i support all layers
+        for (int i = 0; i < instance_create_info.enabledLayerCount; i++) {
+                bool isFound = false;
+                for (const auto& layer : availableLayers) {
+                        if (strcmp(instance_create_info.ppEnabledLayerNames[i], layer.layerName) == 0) {
+                                isFound = true;
+                                break;
+                        }
+                }
+
+                if (!isFound)
+                        VKL_EXIT_WITH_ERROR("One layer was not found.");
+        }
+
+        if (vkCreateInstance(&instance_create_info, nullptr, &vk_instance) != VK_SUCCESS)
+                VKL_EXIT_WITH_ERROR("Function vkCreateInstance failed.");
+
+        if (!vk_instance)
+                VKL_EXIT_WITH_ERROR("No VkInstance created or handle not assigned.");
 #pragma endregion
 
 #pragma region vulkan window surface
-    if (glfwCreateWindowSurface(vk_instance, window, nullptr, &vk_surface) != VK_SUCCESS)
-        VKL_EXIT_WITH_ERROR("Function glfwCreateWindowSurface failed.");
+        if (glfwCreateWindowSurface(vk_instance, window, nullptr, &vk_surface) != VK_SUCCESS)
+                VKL_EXIT_WITH_ERROR("Function glfwCreateWindowSurface failed.");
 
-    if (!vk_surface)
-        VKL_EXIT_WITH_ERROR("No VkSurfaceKHR created or handle not assigned.");
+        if (!vk_surface)
+                VKL_EXIT_WITH_ERROR("No VkSurfaceKHR created or handle not assigned.");
 #pragma endregion
 
 #pragma region vulkan physical device
-    VkPhysicalDeviceFeatures features = {};
-    features.fillModeNonSolid = VK_TRUE;
+        VkPhysicalDeviceFeatures features = {};
+        features.fillModeNonSolid = VK_TRUE;
 
-    // Get devices
-    uint32_t physicalDeviceCount = 0;
-    vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, nullptr);
-    
-    std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-    vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, physicalDevices.data());
-    
-    // remove physical devices that do not support wireframe mode
-    for (size_t i = 0; i < physicalDevices.size(); i++)
-    {
-            VkPhysicalDeviceFeatures physDeviceFeatures = {};
-            vkGetPhysicalDeviceFeatures(physicalDevices[i], &physDeviceFeatures);
+        // Get devices
+        uint32_t physicalDeviceCount = 0;
+        vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, nullptr);
 
-            if (physDeviceFeatures.fillModeNonSolid == VK_FALSE) {
-                    VKL_LOG("Removing a physical device not supporting fillModeNonSolid");
-                    physicalDevices.erase(physicalDevices.begin() + i);
-            }
-    }
-    
-    // Print all devices' name and type
-    for (const auto& device : physicalDevices) {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(device, &properties);
-        VKL_LOG(std::string(properties.deviceName + properties.deviceType));
+        std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
+        vkEnumeratePhysicalDevices(vk_instance, &physicalDeviceCount, physicalDevices.data());
 
-    }
+        // remove physical devices that do not support wireframe mode
+        for (size_t i = 0; i < physicalDevices.size(); i++)
+        {
+                VkPhysicalDeviceFeatures physDeviceFeatures = {};
+                vkGetPhysicalDeviceFeatures(physicalDevices[i], &physDeviceFeatures);
 
-    // let the framework decide the device
-    uint32_t device_index = selectPhysicalDeviceIndex(physicalDevices, vk_surface);
+                if (physDeviceFeatures.fillModeNonSolid == VK_FALSE) {
+                        VKL_LOG("Removing a physical device not supporting fillModeNonSolid");
+                        physicalDevices.erase(physicalDevices.begin() + i);
+                }
+        }
 
-    vk_physical_device = physicalDevices[device_index];
-    // Just print what GPU got selected
-    {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(vk_physical_device, &properties);
-        VKL_LOG(std::string(properties.deviceName));
-    }
+        // Print all devices' name and type
+        for (const auto& device : physicalDevices) {
+                VkPhysicalDeviceProperties properties;
+                vkGetPhysicalDeviceProperties(device, &properties);
+                VKL_LOG(std::string(properties.deviceName + properties.deviceType));
 
-    if (!vk_physical_device)
-        VKL_EXIT_WITH_ERROR("No VkPhysicalDevice selected or handle not assigned.");
+        }
+
+        // let the framework decide the device
+        uint32_t device_index = selectPhysicalDeviceIndex(physicalDevices, vk_surface);
+
+        vk_physical_device = physicalDevices[device_index];
+        // Just print what GPU got selected
+        {
+                VkPhysicalDeviceProperties properties;
+                vkGetPhysicalDeviceProperties(vk_physical_device, &properties);
+                VKL_LOG(std::string(properties.deviceName));
+        }
+
+        if (!vk_physical_device)
+                VKL_EXIT_WITH_ERROR("No VkPhysicalDevice selected or handle not assigned.");
 #pragma endregion
 
 #pragma region vulkan queue family
-    uint32_t selected_queue_family_index = selectQueueFamilyIndex(vk_physical_device, vk_surface);
+        uint32_t selected_queue_family_index = selectQueueFamilyIndex(vk_physical_device, vk_surface);
 
-    // Sanity check if we have selected a valid queue family index:
-    uint32_t queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nullptr);
-    if (selected_queue_family_index >= queue_family_count)
-        VKL_EXIT_WITH_ERROR("Invalid queue family index selected.");
+        // Sanity check if we have selected a valid queue family index:
+        uint32_t queue_family_count = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nullptr);
+        if (selected_queue_family_index >= queue_family_count)
+                VKL_EXIT_WITH_ERROR("Invalid queue family index selected.");
 #pragma endregion
 
 #pragma region logical device and get queue
-    VkDeviceQueueCreateInfo vk_device_queue_create_info = {};
-    vk_device_queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    vk_device_queue_create_info.queueFamilyIndex = selected_queue_family_index;
-    vk_device_queue_create_info.queueCount = 1;
-    float queue_priority = 1.0f;
-    vk_device_queue_create_info.pQueuePriorities = &queue_priority;
+        VkDeviceQueueCreateInfo vk_device_queue_create_info = {};
+        vk_device_queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        vk_device_queue_create_info.queueFamilyIndex = selected_queue_family_index;
+        vk_device_queue_create_info.queueCount = 1;
+        float queue_priority = 1.0f;
+        vk_device_queue_create_info.pQueuePriorities = &queue_priority;
 
-    VkDeviceCreateInfo vk_device_create_info = {};
-    vk_device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    vk_device_create_info.queueCreateInfoCount = 1;
-    vk_device_create_info.pQueueCreateInfos = &vk_device_queue_create_info;
-    vk_device_create_info.enabledExtensionCount = 1;
-    vk_device_create_info.pEnabledFeatures = &features;
-    const char* device_extensions[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    };
-    vk_device_create_info.ppEnabledExtensionNames = device_extensions;
+        VkDeviceCreateInfo vk_device_create_info = {};
+        vk_device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        vk_device_create_info.queueCreateInfoCount = 1;
+        vk_device_create_info.pQueueCreateInfos = &vk_device_queue_create_info;
+        vk_device_create_info.enabledExtensionCount = 1;
+        vk_device_create_info.pEnabledFeatures = &features;
+        const char* device_extensions[] = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+        vk_device_create_info.ppEnabledExtensionNames = device_extensions;
 
-    if (vkCreateDevice(vk_physical_device, &vk_device_create_info, nullptr, &vk_device) != VK_SUCCESS)
-        VKL_EXIT_WITH_ERROR("Something bad happened to vk_device.");
+        if (vkCreateDevice(vk_physical_device, &vk_device_create_info, nullptr, &vk_device) != VK_SUCCESS)
+                VKL_EXIT_WITH_ERROR("Something bad happened to vk_device.");
 
-    if (!vk_device)
-        VKL_EXIT_WITH_ERROR("No VkDevice created or handle not assigned.");
+        if (!vk_device)
+                VKL_EXIT_WITH_ERROR("No VkDevice created or handle not assigned.");
 
-    vkGetDeviceQueue(vk_device, selected_queue_family_index, 0, &vk_queue);
-    if (!vk_queue)
-        VKL_EXIT_WITH_ERROR("No VkQueue selected or handle not assigned.");
+        vkGetDeviceQueue(vk_device, selected_queue_family_index, 0, &vk_queue);
+        if (!vk_queue)
+                VKL_EXIT_WITH_ERROR("No VkQueue selected or handle not assigned.");
 #pragma endregion
 
 #pragma region swapchain
-    uint32_t queueFamilyIndexCount = 0u;
-    std::vector<uint32_t> queueFamilyIndices;
-    VkSurfaceCapabilitiesKHR surface_capabilities = getPhysicalDeviceSurfaceCapabilities(vk_physical_device, vk_surface);
-    
-    // Build the swapchain config struct:
-    VkSwapchainCreateInfoKHR swapchain_create_info = {};
-    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchain_create_info.surface = vk_surface;
-    swapchain_create_info.minImageCount = surface_capabilities.minImageCount;
-    swapchain_create_info.imageArrayLayers = 1u;
-    swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (surface_capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
-        swapchain_create_info.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    } else {
-        std::cout << "Warning: Automatic Testing might fail, VK_IMAGE_USAGE_TRANSFER_SRC_BIT image usage is not supported" << std::endl;
-    }
-    swapchain_create_info.preTransform = surface_capabilities.currentTransform;
-    swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchain_create_info.clipped = VK_TRUE;
-    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchain_create_info.queueFamilyIndexCount = 0;
-    swapchain_create_info.pQueueFamilyIndices = nullptr;
+        uint32_t queueFamilyIndexCount = 0u;
+        std::vector<uint32_t> queueFamilyIndices;
+        VkSurfaceCapabilitiesKHR surface_capabilities = getPhysicalDeviceSurfaceCapabilities(vk_physical_device, vk_surface);
 
-    VkSurfaceFormatKHR surface_format = getSurfaceImageFormat(vk_physical_device, vk_surface);
-    swapchain_create_info.imageFormat = surface_format.format;
-    swapchain_create_info.imageColorSpace = surface_format.colorSpace;
-    
-    VkExtent2D window_dimensions;
-    window_dimensions.width = window_width;
-    window_dimensions.height = window_height;
-    
-    swapchain_create_info.imageExtent = window_dimensions;
-    swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+        // Build the swapchain config struct:
+        VkSwapchainCreateInfoKHR swapchain_create_info = {};
+        swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        swapchain_create_info.surface = vk_surface;
+        swapchain_create_info.minImageCount = surface_capabilities.minImageCount;
+        swapchain_create_info.imageArrayLayers = 1u;
+        swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        if (surface_capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
+                swapchain_create_info.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        }
+        else {
+                std::cout << "Warning: Automatic Testing might fail, VK_IMAGE_USAGE_TRANSFER_SRC_BIT image usage is not supported" << std::endl;
+        }
+        swapchain_create_info.preTransform = surface_capabilities.currentTransform;
+        swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        swapchain_create_info.clipped = VK_TRUE;
+        swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        swapchain_create_info.queueFamilyIndexCount = 0;
+        swapchain_create_info.pQueueFamilyIndices = nullptr;
 
-    // Create the swapchain using vkCreateSwapchainKHR and assign its handle to vk_swapchain!
-    if (vkCreateSwapchainKHR(vk_device, &swapchain_create_info, nullptr, &vk_swapchain) != VK_SUCCESS)
-        VKL_EXIT_WITH_ERROR("VkSwapchainKHR does not have VK_SUCCESS status.");
-    
-    if (!vk_swapchain)
-        VKL_EXIT_WITH_ERROR("No VkSwapchainKHR created or handle not assigned.");
+        VkSurfaceFormatKHR surface_format = getSurfaceImageFormat(vk_physical_device, vk_surface);
+        swapchain_create_info.imageFormat = surface_format.format;
+        swapchain_create_info.imageColorSpace = surface_format.colorSpace;
 
-    uint32_t swapchainCount;
-    vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, nullptr);
-    
-    std::vector< VkImage> vk_swapchain_images(swapchainCount);
-    vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, vk_swapchain_images.data());
+        VkExtent2D window_dimensions;
+        window_dimensions.width = window_width;
+        window_dimensions.height = window_height;
+
+        swapchain_create_info.imageExtent = window_dimensions;
+        swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+        // Create the swapchain using vkCreateSwapchainKHR and assign its handle to vk_swapchain!
+        if (vkCreateSwapchainKHR(vk_device, &swapchain_create_info, nullptr, &vk_swapchain) != VK_SUCCESS)
+                VKL_EXIT_WITH_ERROR("VkSwapchainKHR does not have VK_SUCCESS status.");
+
+        if (!vk_swapchain)
+                VKL_EXIT_WITH_ERROR("No VkSwapchainKHR created or handle not assigned.");
+
+        uint32_t swapchainCount;
+        vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, nullptr);
+
+        std::vector< VkImage> vk_swapchain_images(swapchainCount);
+        vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &swapchainCount, vk_swapchain_images.data());
 #pragma endregion
 
 #pragma region GCG Framework init
-    VkClearValue vk_clear_value = {};
-    vk_clear_value.depthStencil.depth = 1.0f;
-    vk_clear_value.depthStencil.stencil = 0;
+        VkClearValue vk_clear_value = {};
+        vk_clear_value.depthStencil.depth = 1.0f;
+        vk_clear_value.depthStencil.stencil = 0;
 
-    VkImage depth_buffer = vklCreateDeviceLocalImageWithBackingMemory(
-        vk_physical_device,
-        vk_device,
-        window_dimensions.width,
-        window_dimensions.height,
-        VK_FORMAT_D32_SFLOAT, // no stencil !!! note for future self
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
-    );
+        VkImage depth_buffer = vklCreateDeviceLocalImageWithBackingMemory(
+                vk_physical_device,
+                vk_device,
+                window_dimensions.width,
+                window_dimensions.height,
+                VK_FORMAT_D32_SFLOAT, // no stencil !!! note for future self
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+        );
 
-    // Gather swapchain config as required by the framework:
-    VklSwapchainConfig swapchain_config = {};
-    swapchain_config.swapchainHandle = vk_swapchain;
-    swapchain_config.imageExtent = window_dimensions;
-    swapchain_config.swapchainImages.resize(swapchainCount);
-    for (uint32_t i = 0; i < swapchainCount; i++) {
-        auto& fbuffComp = swapchain_config.swapchainImages[i];
+        // Gather swapchain config as required by the framework:
+        VklSwapchainConfig swapchain_config = {};
+        swapchain_config.swapchainHandle = vk_swapchain;
+        swapchain_config.imageExtent = window_dimensions;
+        swapchain_config.swapchainImages.resize(swapchainCount);
+        for (uint32_t i = 0; i < swapchainCount; i++) {
+                auto& fbuffComp = swapchain_config.swapchainImages[i];
 
-        fbuffComp.colorAttachmentImageDetails.imageHandle = vk_swapchain_images[i];
-        fbuffComp.colorAttachmentImageDetails.imageFormat = surface_format.format;
-        fbuffComp.colorAttachmentImageDetails.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        fbuffComp.colorAttachmentImageDetails.clearValue = {};
-        fbuffComp.colorAttachmentImageDetails.clearValue.color = { {0.14f, 0.4f, 0.37f, 1.0f} };
-        
-        fbuffComp.depthAttachmentImageDetails.imageHandle = depth_buffer;
-        fbuffComp.depthAttachmentImageDetails.imageFormat = VK_FORMAT_D32_SFLOAT;
-        fbuffComp.depthAttachmentImageDetails.imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        fbuffComp.depthAttachmentImageDetails.clearValue = vk_clear_value;
-    }
+                fbuffComp.colorAttachmentImageDetails.imageHandle = vk_swapchain_images[i];
+                fbuffComp.colorAttachmentImageDetails.imageFormat = surface_format.format;
+                fbuffComp.colorAttachmentImageDetails.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+                fbuffComp.colorAttachmentImageDetails.clearValue = {};
+                fbuffComp.colorAttachmentImageDetails.clearValue.color = { {0.14f, 0.4f, 0.37f, 1.0f} };
 
-    // Init the framework:
-    if (!gcgInitFramework(vk_instance, vk_surface, vk_physical_device, vk_device, vk_queue, swapchain_config))
-        VKL_EXIT_WITH_ERROR("Failed to init framework");
+                fbuffComp.depthAttachmentImageDetails.imageHandle = depth_buffer;
+                fbuffComp.depthAttachmentImageDetails.imageFormat = VK_FORMAT_D32_SFLOAT;
+                fbuffComp.depthAttachmentImageDetails.imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+                fbuffComp.depthAttachmentImageDetails.clearValue = vk_clear_value;
+        }
+
+        // Init the framework:
+        if (!gcgInitFramework(vk_instance, vk_surface, vk_physical_device, vk_device, vk_queue, swapchain_config))
+                VKL_EXIT_WITH_ERROR("Failed to init framework");
 #pragma endregion
 
 #pragma region custom graphics pipeline config
-    std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/testVertex.vert");
-    std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/testFrag.frag");
+        std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/testVertex.vert");
+        std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/testFrag.frag");
 
-    std::string cornellBox_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
-    std::string cornellBox_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
+        std::string cornellBox_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
+        std::string cornellBox_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
 #pragma endregion
 
 #pragma region uniform buffer struct
 
-    ObjectSettings ubo_builder;
+        ObjectSettings ubo_builder;
 
-    UniformBufferObject ubo_cube = ubo_builder
-            .set_color({ 0.75f, 0.25f, 0.01f, 1.0f })
-            //.apply_rotation((float)glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f))
-            .get_ubo();
-    glm::mat4 model1 = ubo_cube.object_matrix;
-    ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * ubo_cube.object_matrix;
+        UniformBufferObject ubo_cube = ubo_builder
+                .set_color({ 0.75f, 0.25f, 0.01f, 1.0f })
+                //.apply_rotation((float)glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f))
+                .get_ubo();
+        glm::mat4 model1 = ubo_cube.object_matrix;
+        ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * ubo_cube.object_matrix;
 
-    ubo_builder.reset();
+        ubo_builder.reset();
 
-    UniformBufferObject ubo_cornellBox = ubo_builder
-            .get_ubo();
-    glm::mat4 model2 = ubo_cornellBox.object_matrix;
-    ubo_cornellBox.object_matrix = main_camera.get_proj_view_matrix() * ubo_cornellBox.object_matrix;
-    
-    VkBuffer uniform_buffer1 = vklCreateHostCoherentBufferWithBackingMemory(
-        sizeof(ubo_cube), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-    );
-    vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_cube, sizeof(ubo_cube));
+        UniformBufferObject ubo_cornellBox = ubo_builder
+                .get_ubo();
+        glm::mat4 model2 = ubo_cornellBox.object_matrix;
+        ubo_cornellBox.object_matrix = main_camera.get_proj_view_matrix() * ubo_cornellBox.object_matrix;
 
-    VkBuffer uniform_buffer2 = vklCreateHostCoherentBufferWithBackingMemory(
-        sizeof(ubo_cornellBox), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-    );
-    vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_cornellBox, sizeof(ubo_cornellBox));
+        VkBuffer uniform_buffer1 = vklCreateHostCoherentBufferWithBackingMemory(
+                sizeof(ubo_cube), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+        );
+        vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_cube, sizeof(ubo_cube));
+
+        VkBuffer uniform_buffer2 = vklCreateHostCoherentBufferWithBackingMemory(
+                sizeof(ubo_cornellBox), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+        );
+        vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_cornellBox, sizeof(ubo_cornellBox));
 #pragma endregion
-    
+
         Cube cube1 = Cube(2, 1.3, 1.3);
         CornellBox cornellBox = CornellBox(3, 3, 3);
         Cylinder cylinder = Cylinder();
         Sphere sphere = Sphere();
+
+        std::vector<glm::vec3> controlPoints{
+                glm::vec3(-0.3f, 0.6f, 0.0f),
+                glm::vec3(0.0f, 1.6f, 0.0f),
+                glm::vec3(1.4f, 0.3f, 0.0f),
+                glm::vec3(0.0f, 0.3f, 0.0f),
+                glm::vec3(0.0f, -0.5f, 0.0f)
+        };
+
+        Bezier curve(controlPoints, 0.21f, 36, 20);
 
 
 #pragma region Uniform buffer
@@ -1366,7 +1519,8 @@ int main(int argc, char** argv) {
         //alexd_drawObject(vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
         //alexd_drawObject(vk_pipeline, descriptorSet1, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
         alexd_drawObject(vk_pipeline, descriptorSet1, sphere.get_vk_vbuff(), sphere.get_vk_ibuff(), static_cast<uint32_t>(sphere.get_ibuff_size()));
-
+        //alexd_drawObject(vk_pipeline, descriptorSet1, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
+        
         //VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
         //alexd_drawObject(cornellPipeline, descriptorSet2, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
         
@@ -1404,6 +1558,7 @@ int main(int argc, char** argv) {
     cornellBox.destroyVkBuffers();
     cylinder.destroyVkBuffers();
     sphere.destroyVkBuffers();
+    curve.destroyVkBuffers();
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
     vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer2);
