@@ -528,19 +528,19 @@ protected:
 
 class Cube : public Object {
 public:
-        Cube(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& origin = { 0, 0, 0 }) {
+        Cube(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& color = { 0, 0, 0 }, const glm::vec3& origin = { 0, 0, 0 }) {
                 vbuff = {
                         // top verts
-                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), {}},
-                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), {}},
-                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), {}},
-                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), {}},
+                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), color},
+                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), color},
+                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), color},
+                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), color},
 
                         // bottom verts
-                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), {}},
-                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), {}},
-                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), {}},
-                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), {}}
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color},
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), color},
+                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), color},
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), color}
                 };
 
                 ibuff = {
@@ -643,11 +643,11 @@ private:
 
 class Cylinder : public Object {
 public:
-        Cylinder(const float radius = 1.0f, const float height = 1.0f, const int subdivisions = 10, const glm::vec3& origin = {0, 0, 0}) {
+        Cylinder(const float radius = 1.0f, const float height = 1.0f, const int subdivisions = 10, const glm::vec3& color = { 0, 0, 0 }, const glm::vec3& origin = {0, 0, 0}) {
                 float step = (2 * PI) / subdivisions;
                 
                 // Top vert
-                vbuff.push_back({ origin + glm::vec3(0, height / 2, 0), {} });
+                vbuff.push_back({ origin + glm::vec3(0, height / 2, 0), color });
 
                 // Top ring
                 for (int i = 0; i < subdivisions; i++) {
@@ -655,7 +655,7 @@ public:
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
                         
-                        vbuff.push_back({ origin + glm::vec3(x, height / 2, z), {} });
+                        vbuff.push_back({ origin + glm::vec3(x, height / 2, z), color });
                 }
 
                 // Bottom ring
@@ -664,11 +664,11 @@ public:
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
 
-                        vbuff.push_back({ origin + glm::vec3(x, -height / 2, z), {} });
+                        vbuff.push_back({ origin + glm::vec3(x, -height / 2, z), color });
                 }
 
                 // Bottom vert
-                vbuff.push_back({ origin + glm::vec3(0, -height / 2, 0), {} });
+                vbuff.push_back({ origin + glm::vec3(0, -height / 2, 0), color });
 
 
                 // Top face
@@ -731,12 +731,12 @@ public:
 
 class Sphere : public Object {
 public:
-        Sphere(const float radius = 1.0f, const int latitude_subdivisions = 10, const int longitude_subdivisions = 10, const glm::vec3& origin = {}) {
+        Sphere(const float radius = 1.0f, const int latitude_subdivisions = 10, const int longitude_subdivisions = 10, const glm::vec3& color = { 0, 0, 0 }, const glm::vec3& origin = {}) {
                 float latitude_step = PI / latitude_subdivisions;
                 float longitude_step = (2 * PI) / longitude_subdivisions;
 
                 // bottom vert
-                vbuff.push_back({ origin + glm::vec3(0, radius, 0), {} });
+                vbuff.push_back({ origin + glm::vec3(0, radius, 0), color });
 
                 // ring verts
                 for (int i = 1; i < latitude_subdivisions; i++) {
@@ -749,12 +749,12 @@ public:
                                         radius * sin(theta) * cos(phi),
                                         radius * cos(theta),
                                         radius * sin(theta) * sin(phi)),
-                                        {}});
+                                        color});
                         }
                 }
 
                 // top vert
-                vbuff.push_back({ origin + glm::vec3(0, -radius, 0), {} });
+                vbuff.push_back({ origin + glm::vec3(0, -radius, 0), color });
 
 
                 // bottom cap
@@ -804,9 +804,9 @@ public:
 
 class Bezier : public Object {
 public:
-        Bezier(std::vector<glm::vec3>& controlPoints, const float radius, const int segments, const int subdivisions) {
+        Bezier(std::vector<glm::vec3>& controlPoints, const float radius, const int segments, const int subdivisions, const glm::vec3& color = { 0, 0, 0 }) {
                 // first control point is also the first point on the curve
-                vbuff.push_back({ controlPoints[0], {} });
+                vbuff.push_back({ controlPoints[0], color });
 
                 // generate rings
                 float step = 1.0f / segments;
@@ -868,12 +868,12 @@ public:
 
                                 point += circle_origin;
 
-                                vbuff.push_back({ point, {} });
+                                vbuff.push_back({ point, color });
                         }
                 }
 
                 // final point to close the cylinder
-                vbuff.push_back({ controlPoints[controlPoints.size() - 1], {} });
+                vbuff.push_back({ controlPoints[controlPoints.size() - 1], color });
         
                 // top face
                 for (int i = 0; i < subdivisions; i++) {
@@ -944,6 +944,7 @@ private:
                 return DeCasteljau(d_points, t);
         }
 };
+
 struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
@@ -991,6 +992,33 @@ public:
         ObjectSettings& reset() {
                 ubo.object_matrix = glm::mat4(1.0f);
                 return *this;
+        }
+
+        static VkBuffer makeVkBufferfromUBOandUpload(UniformBufferObject& ubo_object) {
+                VkBuffer buffer = vklCreateHostCoherentBufferWithBackingMemory(
+                        sizeof(ubo_object), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+                );
+                vklCopyDataIntoHostCoherentBuffer(buffer, &ubo_object, sizeof(ubo_object));
+
+                return buffer;
+        }
+
+        static void updateDescriptorSets(VkBuffer& uniform_buffer1, VkDescriptorSet& descriptorSet1, VkDevice vk_device) {
+                VkDescriptorBufferInfo bufferInfo1 = {};
+                bufferInfo1.buffer = uniform_buffer1;
+                bufferInfo1.offset = 0;
+                bufferInfo1.range = sizeof(UniformBufferObject);
+
+                VkWriteDescriptorSet write1 = {};
+                write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                write1.dstSet = descriptorSet1;
+                write1.dstBinding = 0;
+                write1.dstArrayElement = 0;
+                write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                write1.descriptorCount = 1;
+                write1.pBufferInfo = &bufferInfo1;
+
+                vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
         }
 private:
         UniformBufferObject ubo;
@@ -1357,38 +1385,70 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region uniform buffer struct
-
         ObjectSettings ubo_builder;
 
-        UniformBufferObject ubo_cube = ubo_builder
-                .set_color({ 0.75f, 0.25f, 0.01f, 1.0f })
-                //.apply_rotation((float)glm::radians(45.0f), glm::vec3(1.0f, 0.0f, 0.0f))
+        // CornellBox settings
+        UniformBufferObject ubo_cornellBox = ubo_builder
                 .get_ubo();
-        glm::mat4 model1 = ubo_cube.object_matrix;
-        ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * ubo_cube.object_matrix;
+        glm::mat4 model_cornell = ubo_cornellBox.object_matrix;
+        ubo_cornellBox.object_matrix = main_camera.get_proj_view_matrix() * model_cornell;
+        VkBuffer cornell_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_cornellBox);
+
 
         ubo_builder.reset();
 
-        UniformBufferObject ubo_cornellBox = ubo_builder
+
+        // Cube settings
+        UniformBufferObject ubo_cube = ubo_builder
+                .apply_rotation((float)glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f))
+                .apply_translation(0.6f * glm::vec3(-1, 0, 0))
+                .apply_translation(0.9f * glm::vec3(0, -1, 0))
                 .get_ubo();
-        glm::mat4 model2 = ubo_cornellBox.object_matrix;
-        ubo_cornellBox.object_matrix = main_camera.get_proj_view_matrix() * ubo_cornellBox.object_matrix;
+        glm::mat4 model_cube = ubo_cube.object_matrix;
+        ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * model_cube;
+        VkBuffer cube_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_cube);
 
-        VkBuffer uniform_buffer1 = vklCreateHostCoherentBufferWithBackingMemory(
-                sizeof(ubo_cube), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-        );
-        vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_cube, sizeof(ubo_cube));
+        ubo_builder.reset();
 
-        VkBuffer uniform_buffer2 = vklCreateHostCoherentBufferWithBackingMemory(
-                sizeof(ubo_cornellBox), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-        );
-        vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_cornellBox, sizeof(ubo_cornellBox));
+
+        // Cylinder settings
+        UniformBufferObject ubo_cylinder = ubo_builder
+                .apply_translation(0.6f * glm::vec3(1, 0, 0))
+                .apply_translation(0.3f * glm::vec3(0, 1, 0))
+                .get_ubo();
+        glm::mat4 model_cylinder = ubo_cylinder.object_matrix;
+        ubo_cylinder.object_matrix = main_camera.get_proj_view_matrix() * model_cylinder;
+        VkBuffer cylinder_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_cylinder);
+
+
+        ubo_builder.reset();
+
+
+        // Bezier Cylinder settings
+        UniformBufferObject ubo_bezier_cyl = ubo_builder
+                .apply_translation(0.6f * glm::vec3(-1, 0, 0))
+                .get_ubo();
+        glm::mat4 model_bezier_cyl= ubo_bezier_cyl.object_matrix;
+        ubo_bezier_cyl.object_matrix = main_camera.get_proj_view_matrix() * model_bezier_cyl;
+        VkBuffer bezier_cylinder_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_bezier_cyl);
+
+
+        ubo_builder.reset();
+
+
+        // Sphere settings
+        UniformBufferObject ubo_sphere = ubo_builder
+                .apply_translation(0.6f * glm::vec3(1, 0, 0))
+                .apply_translation(0.9f * glm::vec3(0, -1, 0))
+                .get_ubo();
+        glm::mat4 model_shpere = ubo_sphere.object_matrix;
+        ubo_sphere.object_matrix = main_camera.get_proj_view_matrix() * model_shpere;
+        VkBuffer sphere_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_sphere);
 #pragma endregion
 
-        Cube cube1 = Cube(2, 1.3, 1.3);
         CornellBox cornellBox = CornellBox(3, 3, 3);
-        Cylinder cylinder = Cylinder();
-        Sphere sphere = Sphere();
+        Cube cube = Cube(0.34f, 0.34f, 0.34f, { 0.0, 0.21, 0.16 });
+        Cylinder cylinder = Cylinder(0.21f, 1.6, 20, { 0.75, 0.25, 0.01 });
 
         std::vector<glm::vec3> controlPoints{
                 glm::vec3(-0.3f, 0.6f, 0.0f),
@@ -1398,7 +1458,9 @@ int main(int argc, char** argv) {
                 glm::vec3(0.0f, -0.5f, 0.0f)
         };
 
-        Bezier curve(controlPoints, 0.21f, 36, 20);
+        Bezier curve(controlPoints, 0.21f, 36, 20, { 0.75, 0.25, 0.01 });
+
+        Sphere sphere = Sphere(0.26f, 18, 36, { 0.12, 0.12, 0.12 });
 
 
 #pragma region Uniform buffer
@@ -1436,60 +1498,43 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("Failed to create descriptor set layout");
 #pragma endregion
     
-#pragma region allocate the descriptor set for teapot1 and teapot 2
+#pragma region allocate the descriptor sets
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &descriptorSetLayout;
 
-    VkDescriptorSet descriptorSet1 = VK_NULL_HANDLE;
-    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet1) != VK_SUCCESS)
+    VkDescriptorSet descriptorSet_cornell = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_cornell) != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 1");
 
-    VkDescriptorSet descriptorSet2 = VK_NULL_HANDLE;
-    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet2) != VK_SUCCESS)
+    VkDescriptorSet descriptorSet_cube = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_cube) != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 2");
+
+    VkDescriptorSet descriptorSet_cyl = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_cyl) != VK_SUCCESS)
+            VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 3");
+
+    VkDescriptorSet descriptorSet_bez_cyl = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_bez_cyl) != VK_SUCCESS)
+            VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 4");
+
+    VkDescriptorSet descriptorSet_sphere = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_sphere) != VK_SUCCESS)
+            VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 5");
+
 #pragma endregion
 
-#pragma region write uniform buffer for teapot 1
-    VkDescriptorBufferInfo bufferInfo1 = {};
-    bufferInfo1.buffer = uniform_buffer1; 
-    bufferInfo1.offset = 0;
-    bufferInfo1.range = sizeof(ubo_cube);
-
-    VkWriteDescriptorSet write1 = {};
-    write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write1.dstSet = descriptorSet1;
-    write1.dstBinding = 0;
-    write1.dstArrayElement = 0;
-    write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write1.descriptorCount = 1;
-    write1.pBufferInfo = &bufferInfo1;
-
-    vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
-#pragma endregion
-
-#pragma region write uniform buffer for teapot 2
-    VkDescriptorBufferInfo bufferInfo2 = {};
-    bufferInfo2.buffer = uniform_buffer2;
-    bufferInfo2.offset = 0;
-    bufferInfo2.range = sizeof(ubo_cornellBox);
-
-    VkWriteDescriptorSet write2 = {};
-    write2.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write2.dstSet = descriptorSet2;
-    write2.dstBinding = 0;
-    write2.dstArrayElement = 0;
-    write2.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    write2.descriptorCount = 1;
-    write2.pBufferInfo = &bufferInfo2;
-
-    vkUpdateDescriptorSets(vk_device, 1, &write2, 0, nullptr);
-#pragma endregion
+    ObjectSettings::updateDescriptorSets(cornell_uniform_buffer, descriptorSet_cornell, vk_device);
+    ObjectSettings::updateDescriptorSets(cube_uniform_buffer, descriptorSet_cube, vk_device);
+    ObjectSettings::updateDescriptorSets(cylinder_uniform_buffer, descriptorSet_cyl, vk_device);
+    ObjectSettings::updateDescriptorSets(bezier_cylinder_uniform_buffer, descriptorSet_bez_cyl, vk_device);
+    ObjectSettings::updateDescriptorSets(sphere_uniform_buffer, descriptorSet_sphere, vk_device);
 
     auto cornellPipelines = pipeline_factory(cornellBox_vertexShader_path, cornellBox_fragmentShader_path);
-    auto cubePipelines = pipeline_factory(cube_vertexShader_path, cube_fragmentShader_path);
+    auto objectsPipeline = pipeline_factory(cube_vertexShader_path, cube_fragmentShader_path);
     
     vklEnablePipelineHotReloading(window, GLFW_KEY_F5);
 #pragma endregion
@@ -1507,22 +1552,32 @@ int main(int argc, char** argv) {
         double deltax = {}; double deltay = {}; get_mouse_delta(window, deltax, deltay);
         glm::mat4 proj_view = main_camera.get_proj_view_matrix(deltax, deltay);
         
-        ubo_cube.object_matrix = proj_view * model1;
-        vklCopyDataIntoHostCoherentBuffer(uniform_buffer1, &ubo_cube, sizeof(ubo_cube));
-
-        ubo_cornellBox.object_matrix = proj_view * model2;
-        vklCopyDataIntoHostCoherentBuffer(uniform_buffer2, &ubo_cornellBox, sizeof(ubo_cornellBox));
+        // update ubo
+        ubo_cornellBox.object_matrix = proj_view * model_cornell;
+        vklCopyDataIntoHostCoherentBuffer(cornell_uniform_buffer, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
+        ubo_cube.object_matrix = proj_view * model_cube;
+        vklCopyDataIntoHostCoherentBuffer(cube_uniform_buffer, &ubo_cube, sizeof(ubo_cube));
+
+        ubo_cylinder.object_matrix = proj_view * model_cylinder;
+        vklCopyDataIntoHostCoherentBuffer(cylinder_uniform_buffer, &ubo_cylinder, sizeof(ubo_cylinder));
+
+        ubo_bezier_cyl.object_matrix = proj_view * model_bezier_cyl;
+        vklCopyDataIntoHostCoherentBuffer(bezier_cylinder_uniform_buffer, &ubo_bezier_cyl, sizeof(ubo_bezier_cyl));
+
+        ubo_sphere.object_matrix = proj_view * model_shpere;
+        vklCopyDataIntoHostCoherentBuffer(sphere_uniform_buffer, &ubo_sphere, sizeof(ubo_sphere));
+
         vklStartRecordingCommands();
         
-        VkPipeline vk_pipeline = choose_pipeline(cubePipelines);
-        //alexd_drawObject(vk_pipeline, descriptorSet1, cube1.get_vk_vbuff(), cube1.get_vk_ibuff(), static_cast<uint32_t>(cube1.get_ibuff_size()));
-        //alexd_drawObject(vk_pipeline, descriptorSet1, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
-        alexd_drawObject(vk_pipeline, descriptorSet1, sphere.get_vk_vbuff(), sphere.get_vk_ibuff(), static_cast<uint32_t>(sphere.get_ibuff_size()));
-        //alexd_drawObject(vk_pipeline, descriptorSet1, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
+        VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
+        alexd_drawObject(cornellPipeline, descriptorSet_cornell, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
         
-        //VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
-        //alexd_drawObject(cornellPipeline, descriptorSet2, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
+        VkPipeline vk_pipeline = choose_pipeline(objectsPipeline);
+        alexd_drawObject(vk_pipeline, descriptorSet_cube, cube.get_vk_vbuff(), cube.get_vk_ibuff(), static_cast<uint32_t>(cube.get_ibuff_size()));
+        alexd_drawObject(vk_pipeline, descriptorSet_cyl, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
+        alexd_drawObject(vk_pipeline, descriptorSet_bez_cyl, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
+        alexd_drawObject(vk_pipeline, descriptorSet_sphere, sphere.get_vk_vbuff(), sphere.get_vk_ibuff(), static_cast<uint32_t>(sphere.get_ibuff_size()));
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
@@ -1549,19 +1604,22 @@ int main(int argc, char** argv) {
     vkDeviceWaitIdle(vk_device);
 
     destroy_pipelines(cornellPipelines);
-    destroy_pipelines(cubePipelines);
+    destroy_pipelines(objectsPipeline);
 
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
     
-    cube1.destroyVkBuffers();
+    cube.destroyVkBuffers();
     cornellBox.destroyVkBuffers();
     cylinder.destroyVkBuffers();
     sphere.destroyVkBuffers();
     curve.destroyVkBuffers();
 
-    vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer1);
-    vklDestroyHostCoherentBufferAndItsBackingMemory(uniform_buffer2);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cornell_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cube_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(cylinder_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(bezier_cylinder_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(sphere_uniform_buffer);
 
     vklDestroyDeviceLocalImageAndItsBackingMemory(depth_buffer);
     
