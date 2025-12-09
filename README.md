@@ -55,3 +55,21 @@ Windows path length is a major problem often, it is restricted to 260 characters
 - F1: wireframe on / off
 - F2: cycle: cull modes (none, front, back)
 - F5: reload shaders
+
+# Procedural meshes: cylinders, sphere and bezier curves
+
+> I wanted to answer to someone with this message but I did not. I was afraid I gave too much details.
+
+```I did this task, and for me, it worked if I split the problem into smaller chunks. Essentially, you need to add to the vertex buffer rings of vertices that are evenly distributed in a circle (try looking it up on the web how to use trigonometry and such to nicely generate the number of vertices you want per ring).
+
+For the index buffer, I just looped over each ring of the mesh and tried my best to close the face with two triangles. If the winding is wrong, I would just flip two of the indexes I add to my index buffer.
+
+...and so on. You just have to imagine how you would make the mesh out of ping-pong balls and pasta!
+
+It is intimidating at first, but once you break the problem down, it is achievable.
+```
+
+## Helpful tutorials
+
+- https://www.scratchapixel.com/lessons/geometry/bezier-curve-rendering-utah-teapot/curves-as-geometry.html
+- https://grokipedia.com/page/De_Casteljau's_algorithm
