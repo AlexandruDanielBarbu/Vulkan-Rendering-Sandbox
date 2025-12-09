@@ -918,7 +918,6 @@ public:
                 populate_VkBuffers();
         }
 private:
-        // https://www.scratchapixel.com/lessons/geometry/bezier-curve-rendering-utah-teapot/curves-as-geometry.html
         // DeCasteljau(t) -- does the alg for a nominated t
         glm::vec3 DeCasteljau(std::vector<glm::vec3>& og_points, const float t) {
                 std::vector<glm::vec3> points = og_points;
