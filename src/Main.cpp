@@ -808,6 +808,8 @@ public:
                 // first control point is also the first point on the curve
                 vbuff.push_back({ controlPoints[0], color });
 
+                glm::vec3 previousTangent;
+
                 // generate rings
                 float step = 1.0f / segments;
                 for (int i = 0; i <= segments; i++) {
@@ -816,7 +818,12 @@ public:
                         // generate point on curve
                         glm::vec3 circle_origin = DeCasteljau(controlPoints, t);
                         glm::vec3 tangent = glm::normalize(derivateBezierCurve(controlPoints, t));
+                        if (i == 0) previousTangent = tangent;
 
+                        if (glm::length(tangent) < 1e-5f) {
+                                tangent = previousTangent;
+                        }
+                        
                         char strongestAxis = 'x';
                         if (abs(tangent.x) > abs(tangent.y))
                                 if (abs(tangent.x) > abs(tangent.z))
@@ -870,6 +877,8 @@ public:
 
                                 vbuff.push_back({ point, color });
                         }
+
+                        previousTangent = tangent;
                 }
 
                 // final point to close the cylinder
