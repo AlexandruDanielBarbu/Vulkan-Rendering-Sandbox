@@ -953,6 +953,77 @@ private:
         }
 };
 
+class Torus : public Object {
+public:
+        Torus(float bigRadius, float smallRadius, int s, int n, glm::vec3 origin = { 0,0,0 }, glm::vec3 color = { 0,0,0 }) {
+                // generate vbuff
+                float r = smallRadius;
+                float R = bigRadius;
+
+                float torusSectionStep = (2 * PI) / s;
+                float vertStep = (2 * PI) / n;
+
+                for (int circleSegment = 0; circleSegment <= s; circleSegment++) {
+                        float alfa = circleSegment * torusSectionStep;
+                        if (circleSegment == s) alfa = 0.0f;
+
+                        glm::vec3 forward(0, 0, 1);
+
+                        glm::vec3 circleOrigin(
+                                R * cos(alfa),
+                                R * sin(alfa),
+                                0
+                        );
+
+                        glm::vec3 right = glm::normalize(circleOrigin);
+
+                        // the normal might point backwards here
+                        glm::vec3 up = glm::normalize(glm::cross(forward, right));
+
+                        for (int vertIndex = 0; vertIndex < n; vertIndex++) {
+                                float beta = vertIndex * vertStep;
+
+                                glm::vec3 point(
+                                        r * cos(beta),
+                                        0,
+                                        r * sin(beta)
+                                );
+
+                                glm::mat3 orientation(right, up, forward);
+
+                                point = orientation * point + circleOrigin;
+
+                                //glm::vec3 point = r * cos(beta) * up + r * sin(beta) * right;
+                                //point += circleOrigin;
+
+                                vbuff.push_back({ point, color });
+                        }
+                }
+
+                // generate ibuff
+                for (int i = 0; i < s; i++) {
+                        int ringStart = i * n;
+                        int nextRingStart = (i + 1) * n;
+
+                        for (int j = 0; j < n; j++) {
+                                int jNext = (j + 1) % n;
+
+                                // Triangle 1
+                                ibuff.push_back(ringStart + j);
+                                ibuff.push_back(nextRingStart + j);
+                                ibuff.push_back(ringStart + jNext);
+
+                                // Triangle 2
+                                ibuff.push_back(ringStart + jNext);
+                                ibuff.push_back(nextRingStart + j);
+                                ibuff.push_back(nextRingStart + jNext);
+                        }
+                }
+
+                // create VkBuffers
+                populate_VkBuffers();
+        }
+};
 struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
@@ -1452,6 +1523,19 @@ int main(int argc, char** argv) {
         glm::mat4 model_shpere = ubo_sphere.object_matrix;
         ubo_sphere.object_matrix = main_camera.get_proj_view_matrix() * model_shpere;
         VkBuffer sphere_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_sphere);
+
+        
+        ubo_builder.reset();
+        
+        
+        // Torus
+        UniformBufferObject ubo_torus = ubo_builder
+                .apply_rotation(glm::radians(45.0f), glm::vec3(1,0,0))
+                .apply_scale(glm::vec3(1, 1.5f, 1))
+                .get_ubo();
+        glm::mat4 model_torus = ubo_torus.object_matrix;
+        ubo_torus.object_matrix = main_camera.get_proj_view_matrix() * model_torus;
+        VkBuffer torus_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_torus);
 #pragma endregion
 
         CornellBox cornellBox = CornellBox(3, 3, 3);
@@ -1465,11 +1549,9 @@ int main(int argc, char** argv) {
                 glm::vec3(0.0f, 0.3f, 0.0f),
                 glm::vec3(0.0f, -0.5f, 0.0f)
         };
-
         Bezier curve(controlPoints, 0.21f, 36, 20, { 0.75, 0.25, 0.01 });
-
         Sphere sphere = Sphere(0.26f, 18, 36, { 0.12, 0.12, 0.12 });
-
+        Torus torus = Torus(1.1f, 0.1f, 32, 8, { 0,0,0 }, { 0.38, 0.67, 0.84 });
 
 #pragma region Uniform buffer
 #pragma region descriptor pool
@@ -1533,6 +1615,11 @@ int main(int argc, char** argv) {
     if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_sphere) != VK_SUCCESS)
             VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 5");
 
+    VkDescriptorSet descriptorSet_torus = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_torus) != VK_SUCCESS)
+            VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 6");
+    // note i have 8 total descriptors reserved!
+
 #pragma endregion
 
     ObjectSettings::updateDescriptorSets(cornell_uniform_buffer, descriptorSet_cornell, vk_device);
@@ -1540,6 +1627,7 @@ int main(int argc, char** argv) {
     ObjectSettings::updateDescriptorSets(cylinder_uniform_buffer, descriptorSet_cyl, vk_device);
     ObjectSettings::updateDescriptorSets(bezier_cylinder_uniform_buffer, descriptorSet_bez_cyl, vk_device);
     ObjectSettings::updateDescriptorSets(sphere_uniform_buffer, descriptorSet_sphere, vk_device);
+    ObjectSettings::updateDescriptorSets(torus_uniform_buffer, descriptorSet_torus, vk_device);
 
     auto cornellPipelines = pipeline_factory(cornellBox_vertexShader_path, cornellBox_fragmentShader_path);
     auto objectsPipeline = pipeline_factory(cube_vertexShader_path, cube_fragmentShader_path);
@@ -1576,6 +1664,9 @@ int main(int argc, char** argv) {
         ubo_sphere.object_matrix = proj_view * model_shpere;
         vklCopyDataIntoHostCoherentBuffer(sphere_uniform_buffer, &ubo_sphere, sizeof(ubo_sphere));
 
+        ubo_torus.object_matrix = proj_view * model_torus;
+        vklCopyDataIntoHostCoherentBuffer(torus_uniform_buffer, &ubo_torus, sizeof(ubo_torus));
+
         vklStartRecordingCommands();
         
         VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
@@ -1586,6 +1677,7 @@ int main(int argc, char** argv) {
         alexd_drawObject(vk_pipeline, descriptorSet_cyl, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
         alexd_drawObject(vk_pipeline, descriptorSet_bez_cyl, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
         alexd_drawObject(vk_pipeline, descriptorSet_sphere, sphere.get_vk_vbuff(), sphere.get_vk_ibuff(), static_cast<uint32_t>(sphere.get_ibuff_size()));
+        alexd_drawObject(vk_pipeline, descriptorSet_torus, torus.get_vk_vbuff(), torus.get_vk_ibuff(), static_cast<uint32_t>(torus.get_ibuff_size()));
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
@@ -1622,12 +1714,14 @@ int main(int argc, char** argv) {
     cylinder.destroyVkBuffers();
     sphere.destroyVkBuffers();
     curve.destroyVkBuffers();
+    torus.destroyVkBuffers();
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(cornell_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(cube_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(cylinder_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(bezier_cylinder_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(sphere_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(torus_uniform_buffer);
 
     vklDestroyDeviceLocalImageAndItsBackingMemory(depth_buffer);
     
