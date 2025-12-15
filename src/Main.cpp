@@ -184,7 +184,7 @@ void get_mouse_delta(GLFWwindow* window, double& deltax, double& deltay) {
         deltax = xpos - xposPrev;
         deltay = ypos - yPosPrev;
 
-        std::cout << '(' << deltax << ' ' << deltay << ')' << std::endl;
+        //std::cout << '(' << deltax << ' ' << deltay << ')' << std::endl;
         // update previous mouse positions
         xposPrev = xpos;
         yPosPrev = ypos;
