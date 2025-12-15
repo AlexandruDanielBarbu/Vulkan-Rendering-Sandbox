@@ -184,7 +184,7 @@ void get_mouse_delta(GLFWwindow* window, double& deltax, double& deltay) {
         deltax = xpos - xposPrev;
         deltay = ypos - yPosPrev;
 
-        std::cout << '(' << deltax << ' ' << deltay << ')' << std::endl;
+        //std::cout << '(' << deltax << ' ' << deltay << ')' << std::endl;
         // update previous mouse positions
         xposPrev = xpos;
         yPosPrev = ypos;
@@ -818,45 +818,12 @@ public:
                         // generate point on curve
                         glm::vec3 circle_origin = DeCasteljau(controlPoints, t);
                         glm::vec3 tangent = glm::normalize(derivateBezierCurve(controlPoints, t));
-                        if (i == 0) previousTangent = tangent;
-
-                        if (glm::length(tangent) < 1e-5f) {
-                                tangent = previousTangent;
-                        }
-                        
-                        char strongestAxis = 'x';
-                        if (abs(tangent.x) > abs(tangent.y))
-                                if (abs(tangent.x) > abs(tangent.z))
-                                        strongestAxis = 'x';
-                                else
-                                        strongestAxis = 'z';
-                        else if (abs(tangent.y) > abs(tangent.z))
-                                strongestAxis = 'y';
-                        else
-                                strongestAxis = 'z';
-
-                        // get my local axis
                         glm::vec3 up, forward, right;
 
-                        switch (strongestAxis) {
-                        case 'x':
-                        case 'y':
-                                up = tangent;
-                                forward = glm::vec3(0, 0, 1);
-                                right = glm::normalize(glm::cross(up, forward));
-                                forward = glm::normalize(glm::cross(right, up));
-                                break;
-
-                        // might fail with up = glm::vec3(0,0,0) but it's ok for now
-                        case 'z':
-                                up = tangent;
-                                right = glm::vec3(0, 0, 1);
-                                forward = glm::normalize(glm::cross(right, up));
-                                right = glm::normalize(glm::cross(up, forward));
-                                break;
-                        default:
-                                break;
-                        };
+                        up = tangent;
+                        forward = glm::vec3(0, 0, 1);
+                        right = glm::normalize(glm::cross(up, forward));
+                        //forward = glm::normalize(glm::cross(right, up));
 
                         // generate circle in the new x'o'z' plane
                         float vertStep = (2 * PI) / subdivisions;
