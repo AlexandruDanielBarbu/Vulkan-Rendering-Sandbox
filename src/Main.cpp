@@ -83,6 +83,7 @@ void errorCallbackFromGlfw(int error, const char* description) { std::cout << "G
 struct Vertex {
         glm::vec3 pos;
         glm::vec3 color;
+        glm::vec3 normal;
 };
 
 bool reset_camera = false;
@@ -530,43 +531,67 @@ class Cube : public Object {
 public:
         Cube(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& color = { 0, 0, 0 }, const glm::vec3& origin = { 0, 0, 0 }) {
                 vbuff = {
-                        // top verts
-                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), color},
-                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), color},
-                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), color},
-                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), color},
+                        // top face verts
+                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), color, glm::vec3(0, 1, 0)},  // A
+                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), color, glm::vec3(0, 1, 0)},  // B
+                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), color, glm::vec3(0, 1, 0)},  // C
+                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), color, glm::vec3(0, 1, 0)},  // D
 
-                        // bottom verts
-                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color},
-                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), color},
-                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), color},
-                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), color}
+                        // front face (one facing +z axis)
+                        {origin + glm::vec3(-width / 2, -height / 2, depth / 2), color, glm::vec3(0, 0, 1)},  // P
+                        {origin + glm::vec3( width / 2, -height / 2, depth / 2), color, glm::vec3(0, 0, 1)},  // Q
+                        {origin + glm::vec3( width / 2,  height / 2, depth / 2), color, glm::vec3(0, 0, 1)},  // D
+                        {origin + glm::vec3(-width / 2,  height / 2, depth / 2), color, glm::vec3(0, 0, 1)},  // C
+
+                        // left face
+                        {origin + glm::vec3(width / 2, -height / 2, -depth / 2), color, glm::vec3(1, 0, 0)},  // N
+                        {origin + glm::vec3(width / 2, -height / 2,  depth / 2), color, glm::vec3(1, 0, 0)},  // P
+                        {origin + glm::vec3(width / 2,  height / 2,  depth / 2), color, glm::vec3(1, 0, 0)},  // C
+                        {origin + glm::vec3(width / 2,  height / 2, -depth / 2), color, glm::vec3(1, 0, 0)},  // B
+
+                        // back face (one facing away from +z axis)
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(0, 0, -1)},  // M
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), color, glm::vec3(0, 0, -1)},  // N
+                        {origin + glm::vec3( width / 2,  height / 2, -depth / 2), color, glm::vec3(0, 0, -1)},  // B
+                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), color, glm::vec3(0, 0, -1)},  // A
+
+                        // right face
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), color, glm::vec3(-1, 0, 0)},  // Q
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(-1, 0, 0)},  // M
+                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), color, glm::vec3(-1, 0, 0)},  // A
+                        {origin + glm::vec3(-width / 2,  height / 2,  depth / 2), color, glm::vec3(-1, 0, 0)},  // D
+
+                        // bottom face verts
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(0, -1, 0)},  // M
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), color, glm::vec3(0, -1, 0)},  // N
+                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), color, glm::vec3(0, -1, 0)},  // P
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), color, glm::vec3(0, -1, 0)}   // Q
                 };
 
                 ibuff = {
-                        // TOP (y = +h/2), normal = +Y
+                        // top
                         3, 2, 1,
                         3, 1, 0,
 
-                        // BOTTOM (y = -h/2), normal = -Y
+                        // front
                         4, 5, 6,
                         4, 6, 7,
 
-                        // FRONT  (z = +d/2), normal = +Z
-                        0, 1, 5,
-                        0, 5, 4,
+                        // left
+                        11, 10, 9,
+                        11, 9, 8,
 
-                        // BACK   (z = -d/2), normal = -Z
-                        2, 3, 7,
-                        2, 7, 6,
+                        // back
+                        15, 14, 13,
+                        15, 13, 12,
 
-                        // LEFT   (x = -w/2), normal = -X
-                        3, 0, 4,
-                        3, 4, 7,
+                        // right
+                        19, 18, 17,
+                        19, 17, 16,
 
-                        // RIGHT  (x = +w/2), normal = +X
-                        1, 2, 6,
-                        1, 6, 5
+                        // bottom
+                        20, 21, 23,
+                        21, 22, 23
                 };
         
                 populate_VkBuffers();
@@ -576,36 +601,37 @@ public:
 class CornellBox : public Object {
 public:
         CornellBox(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& origin = { 0, 0, 0 }) {
+                // TODO i might need to flip the normals here
                 vbuff = {
                         // top verts
-                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), topFaceColor},
-                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), topFaceColor},
-                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), topFaceColor},
-                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), topFaceColor},
+                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), topFaceColor, glm::vec3(0, -1, 0)},
+                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), topFaceColor, glm::vec3(0, -1, 0)},
+                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), topFaceColor, glm::vec3(0, -1, 0)},
+                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), topFaceColor, glm::vec3(0, -1, 0)},
 
                         // bottom verts
-                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), bottomFaceColor},
-                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), bottomFaceColor},
-                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), bottomFaceColor},
-                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), bottomFaceColor},
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), bottomFaceColor, glm::vec3(0, 1, 0)},
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), bottomFaceColor, glm::vec3(0, 1, 0)},
+                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), bottomFaceColor, glm::vec3(0, 1, 0)},
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), bottomFaceColor, glm::vec3(0, 1, 0)},
 
                         // left verts
-                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), leftFaceColor},
-                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), leftFaceColor},
-                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), leftFaceColor},
-                        {origin + glm::vec3(-width / 2,  height / 2,  depth / 2), leftFaceColor},
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), leftFaceColor, glm::vec3(1, 0, 0)},
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), leftFaceColor, glm::vec3(1, 0, 0)},
+                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), leftFaceColor, glm::vec3(1, 0, 0)},
+                        {origin + glm::vec3(-width / 2,  height / 2,  depth / 2), leftFaceColor, glm::vec3(1, 0, 0)},
 
                         // right verts
-                        {origin + glm::vec3(width / 2, -height / 2, -depth / 2), rightFaceColor},
-                        {origin + glm::vec3(width / 2, -height / 2,  depth / 2), rightFaceColor},
-                        {origin + glm::vec3(width / 2,  height / 2,  depth / 2), rightFaceColor},
-                        {origin + glm::vec3(width / 2,  height / 2, -depth / 2), rightFaceColor},
+                        {origin + glm::vec3(width / 2, -height / 2, -depth / 2), rightFaceColor, glm::vec3(-1, 0, 0)},
+                        {origin + glm::vec3(width / 2, -height / 2,  depth / 2), rightFaceColor, glm::vec3(-1, 0, 0)},
+                        {origin + glm::vec3(width / 2,  height / 2,  depth / 2), rightFaceColor, glm::vec3(-1, 0, 0)},
+                        {origin + glm::vec3(width / 2,  height / 2, -depth / 2), rightFaceColor, glm::vec3(-1, 0, 0)},
 
                         // back verts
-                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), backFaceColor},
-                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), backFaceColor},
-                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), backFaceColor},
-                        {origin + glm::vec3( width / 2,  height / 2, -depth / 2), backFaceColor}
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), backFaceColor, glm::vec3(0, 0, 1)},
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), backFaceColor, glm::vec3(0, 0, 1)},
+                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), backFaceColor, glm::vec3(0, 0, 1)},
+                        {origin + glm::vec3( width / 2,  height / 2, -depth / 2), backFaceColor, glm::vec3(0, 0, 1)}
                 };
 
                 ibuff = {
@@ -646,8 +672,9 @@ public:
         Cylinder(const float radius = 1.0f, const float height = 1.0f, const int subdivisions = 10, const glm::vec3& color = { 0, 0, 0 }, const glm::vec3& origin = {0, 0, 0}) {
                 float step = (2 * PI) / subdivisions;
                 
+                // TODO dupplicate top and bottom ring with right normal values
                 // Top vert
-                vbuff.push_back({ origin + glm::vec3(0, height / 2, 0), color });
+                vbuff.push_back({ origin + glm::vec3(0, height / 2, 0), color, glm::vec3(0, 1, 0)});
 
                 // Top ring
                 for (int i = 0; i < subdivisions; i++) {
@@ -655,7 +682,7 @@ public:
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
                         
-                        vbuff.push_back({ origin + glm::vec3(x, height / 2, z), color });
+                        vbuff.push_back({ origin + glm::vec3(x, height / 2, z), color, glm::vec3(0, 1, 0)});
                 }
 
                 // Bottom ring
@@ -664,11 +691,11 @@ public:
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
 
-                        vbuff.push_back({ origin + glm::vec3(x, -height / 2, z), color });
+                        vbuff.push_back({ origin + glm::vec3(x, -height / 2, z), color, glm::vec3(0, -1, 0) });
                 }
 
                 // Bottom vert
-                vbuff.push_back({ origin + glm::vec3(0, -height / 2, 0), color });
+                vbuff.push_back({ origin + glm::vec3(0, -height / 2, 0), color, glm::vec3(0, -1, 0) });
 
 
                 // Top face
@@ -1454,6 +1481,7 @@ int main(int argc, char** argv) {
         glm::mat4 model_cube = ubo_cube.object_matrix;
         ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * model_cube;
         VkBuffer cube_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_cube);
+
 
         ubo_builder.reset();
 
