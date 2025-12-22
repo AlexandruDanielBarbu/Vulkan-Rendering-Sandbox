@@ -277,7 +277,7 @@ void populate_pipeline_configs(
         };
 
         // on location 0 in my vertex buffer
-        config.inputAttributeDescriptions.resize(2, {});
+        config.inputAttributeDescriptions.resize(3, {});
         config.inputAttributeDescriptions[0] = {
                 0,                                   // .location 
                 0,                                   // .binding 
@@ -290,6 +290,13 @@ void populate_pipeline_configs(
                 0,                                   // .binding 
                 VK_FORMAT_R32G32B32_SFLOAT,          // .format 
                 offsetof(Vertex, color)              // .offset 
+        };
+
+        config.inputAttributeDescriptions[2] = {
+                2,                                   // .location 
+                0,                                   // .binding 
+                VK_FORMAT_R32G32B32_SFLOAT,          // .format 
+                offsetof(Vertex, normal)             // .offset 
         };
 
         // ubo setup
@@ -672,7 +679,6 @@ public:
         Cylinder(const float radius = 1.0f, const float height = 1.0f, const int subdivisions = 10, const glm::vec3& color = { 0, 0, 0 }, const glm::vec3& origin = {0, 0, 0}) {
                 float step = (2 * PI) / subdivisions;
                 
-                // TODO dupplicate top and bottom ring with right normal values
                 // Top vert
                 vbuff.push_back({ origin + glm::vec3(0, height / 2, 0), color, glm::vec3(0, 1, 0)});
 
@@ -683,6 +689,24 @@ public:
                         float z = radius * sin(phi);
                         
                         vbuff.push_back({ origin + glm::vec3(x, height / 2, z), color, glm::vec3(0, 1, 0)});
+                }
+
+                // 2nd Top ring
+                for (int i = 0; i < subdivisions; i++) {
+                        float phi = i * step;
+                        float x = radius * cos(phi);
+                        float z = radius * sin(phi);
+
+                        vbuff.push_back({ origin + glm::vec3(x, height / 2, z), color, glm::normalize(glm::vec3(x, height / 2, z) - glm::vec3(0, height / 2, 0)) });
+                }
+
+                // 2nd Bottom ring
+                for (int i = 0; i < subdivisions; i++) {
+                        float phi = i * step;
+                        float x = radius * cos(phi);
+                        float z = radius * sin(phi);
+
+                        vbuff.push_back({ origin + glm::vec3(x, -height / 2, z), color, glm::normalize(glm::vec3(x, -height / 2, z) - glm::vec3(0, -height / 2, 0)) });
                 }
 
                 // Bottom ring
@@ -698,58 +722,46 @@ public:
                 vbuff.push_back({ origin + glm::vec3(0, -height / 2, 0), color, glm::vec3(0, -1, 0) });
 
 
-                // Top face
-                for (int i = 1; i <= subdivisions; i++) {
-                        if (i != subdivisions) {
-                                ibuff.push_back(0);
-                                ibuff.push_back(i + 1);
-                                ibuff.push_back(i);
-                                continue;
-                        }
-
-                        // last triangle case
+                // top face
+                for (int i = 0; i < subdivisions; i++) {
+                        int iNext = (i + 1) % subdivisions;
                         ibuff.push_back(0);
-                        ibuff.push_back(1);
-                        ibuff.push_back(i);
-                }
-
-                // Bottom face
-                for (int i = 1; i <= subdivisions; i++) {
-                        if (i != subdivisions) {
-                                ibuff.push_back(2 * subdivisions + 1);
-                                ibuff.push_back(i + subdivisions);
-                                ibuff.push_back(i + 1 + subdivisions);
-                                continue;
-                        }
-                        
-                        // last triangle case
-                        ibuff.push_back(2 * subdivisions + 1);
-                        ibuff.push_back(i + subdivisions);
-                        ibuff.push_back(1 + subdivisions);
+                        ibuff.push_back(1 + iNext);
+                        ibuff.push_back(1 + i);
                 }
 
                 // Lateral faces
-                for (int i = 1; i <= subdivisions; i++) {
-                        if (i != subdivisions) {
-                                // triangle 1
-                                ibuff.push_back(i);
-                                ibuff.push_back(i + 1);
-                                ibuff.push_back(i + subdivisions);
+                int top2Start = 1 + subdivisions;
+                int bottom2Start = top2Start + subdivisions;
 
-                                // triangle 2
-                                ibuff.push_back(i + 1);
-                                ibuff.push_back(i + 1 + subdivisions);
-                                ibuff.push_back(i + subdivisions);
-                                continue;
-                        }
+                for (int j = 0; j < subdivisions; j++) {
+                        int jNext = (j + 1) % subdivisions;
 
-                        ibuff.push_back(i);
-                        ibuff.push_back(1);
-                        ibuff.push_back(i + subdivisions);
+                        int top0 = top2Start + j;
+                        int top1 = top2Start + jNext;
+                        int bot0 = bottom2Start + j;
+                        int bot1 = bottom2Start + jNext;
 
-                        ibuff.push_back(1);
-                        ibuff.push_back(1 + subdivisions);
-                        ibuff.push_back(i + subdivisions);
+                        // triangle 1
+                        ibuff.push_back(top0);
+                        ibuff.push_back(top1);
+                        ibuff.push_back(bot0);
+
+                        // triangle 2
+                        ibuff.push_back(top1);
+                        ibuff.push_back(bot1);
+                        ibuff.push_back(bot0);
+                }
+
+                // bottom face
+                int last_vert = vbuff.size() - 1;
+                int last_ring_start = last_vert - subdivisions;
+
+                for (int j = 0; j < subdivisions; j++) {
+                        int jNext = (j + 1) % subdivisions;
+                        ibuff.push_back(last_vert);
+                        ibuff.push_back(last_ring_start + j);
+                        ibuff.push_back(last_ring_start + jNext);
                 }
 
                 populate_VkBuffers();
