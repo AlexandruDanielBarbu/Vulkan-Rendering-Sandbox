@@ -848,11 +848,38 @@ public:
 class Bezier : public Object {
 public:
         Bezier(std::vector<glm::vec3>& controlPoints, const float radius, const int segments, const int subdivisions, const glm::vec3& color = { 0, 0, 0 }) {
-                // first control point is also the first point on the curve
-                // TODO update normal of this poinnt uing the first ring
-                vbuff.push_back({ controlPoints[0], color });
+                // Top verts facing normally away from the mesh
+                {
+                        glm::vec3 topTangent = glm::normalize(derivateBezierCurve(controlPoints, 0));
+                        glm::vec3 up, forward, right;
 
-                // TODO generate 2nd top and bottom rings
+                        up = topTangent;
+                        forward = glm::vec3(0, 0, 1);
+                        right = glm::normalize(glm::cross(up, forward));
+
+                        vbuff.push_back({ controlPoints[0], color, -up });
+
+
+                        float vertStep = (2 * PI) / subdivisions;
+                        for (int vertCount = 0; vertCount < subdivisions; vertCount++) {
+                                float phi = vertCount * vertStep;
+
+                                glm::vec3 point(
+                                        radius * cos(phi),
+                                        0,
+                                        radius * sin(phi)
+                                );
+
+                                glm::mat3 orientation(right, up, forward);
+
+                                point = orientation * point;
+
+                                point += controlPoints[0];
+
+                                vbuff.push_back({ point, color,  glm::normalize(point - controlPoints[0]) });
+                        }
+                }
+
                 
                 // generate rings
                 float step = 1.0f / segments;
@@ -890,11 +917,39 @@ public:
                         }
                 }
 
-                // final point to close the cylinder
-                // TODO same as top point
-                vbuff.push_back({ controlPoints[controlPoints.size() - 1], color });
+
+                {
+                        glm::vec3 topTangent = glm::normalize(derivateBezierCurve(controlPoints, 1));
+                        glm::vec3 up, forward, right;
+
+                        up = topTangent;
+                        forward = glm::vec3(0, 0, 1);
+                        right = glm::normalize(glm::cross(up, forward));
+
+                        float vertStep = (2 * PI) / subdivisions;
+                        for (int vertCount = 0; vertCount < subdivisions; vertCount++) {
+                                float phi = vertCount * vertStep;
+
+                                glm::vec3 point(
+                                        radius * cos(phi),
+                                        0,
+                                        radius * sin(phi)
+                                );
+
+                                glm::mat3 orientation(right, up, forward);
+
+                                point = orientation * point;
+
+                                point += controlPoints[controlPoints.size() - 1];
+
+                                vbuff.push_back({ point, color,  glm::normalize(point - controlPoints[controlPoints.size()-1])});
+                        }
+
+                        vbuff.push_back({ controlPoints[controlPoints.size() - 1], color, up });
+                }
+
         
-                // top face
+                // top face - unchanged
                 for (int i = 0; i < subdivisions; i++) {
                         int iNext = (i + 1) % subdivisions;
                         ibuff.push_back(0);
@@ -905,7 +960,7 @@ public:
                 // TODO this changes just like the cylinder
                 // lateral faces
                 // nasty mesh bug if i let this loop run up to  `< latitude_subdivisions - 1`
-                for (int i = 0; i < segments; i++) {
+                for (int i = 1; i < segments + 1; i++) {
                         int ringStart = 1 + i * subdivisions;
                         int nextRingStart = 1 + (i + 1) * subdivisions;
 
@@ -924,7 +979,7 @@ public:
                         }
                 }
 
-                // bottom face
+                // bottom face - unchanged
                 int last_vert = vbuff.size() - 1;
                 int last_ring_start = last_vert - subdivisions;
 
