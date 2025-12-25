@@ -775,7 +775,7 @@ public:
                 float longitude_step = (2 * PI) / longitude_subdivisions;
 
                 // bottom vert
-                vbuff.push_back({ origin + glm::vec3(0, radius, 0), color });
+                vbuff.push_back({ origin + glm::vec3(0, radius, 0), color, glm::vec3(0, -1, 0)});
 
                 // ring verts
                 for (int i = 1; i < latitude_subdivisions; i++) {
@@ -788,12 +788,16 @@ public:
                                         radius * sin(theta) * cos(phi),
                                         radius * cos(theta),
                                         radius * sin(theta) * sin(phi)),
-                                        color});
+                                        color,
+                                        glm::normalize(glm::vec3(
+                                        radius * sin(theta) * cos(phi),
+                                        radius * cos(theta),
+                                        radius * sin(theta) * sin(phi)) - origin)});
                         }
                 }
 
                 // top vert
-                vbuff.push_back({ origin + glm::vec3(0, -radius, 0), color });
+                vbuff.push_back({ origin + glm::vec3(0, -radius, 0), color, glm::vec3(0, 1, 0) });
 
 
                 // bottom cap
@@ -845,10 +849,11 @@ class Bezier : public Object {
 public:
         Bezier(std::vector<glm::vec3>& controlPoints, const float radius, const int segments, const int subdivisions, const glm::vec3& color = { 0, 0, 0 }) {
                 // first control point is also the first point on the curve
+                // TODO update normal of this poinnt uing the first ring
                 vbuff.push_back({ controlPoints[0], color });
 
-                glm::vec3 previousTangent;
-
+                // TODO generate 2nd top and bottom rings
+                
                 // generate rings
                 float step = 1.0f / segments;
                 for (int i = 0; i <= segments; i++) {
@@ -863,7 +868,6 @@ public:
                         up = tangent;
                         forward = glm::vec3(0, 0, 1);
                         right = glm::normalize(glm::cross(up, forward));
-                        //forward = glm::normalize(glm::cross(right, up));
                         
                         // generate circle in the new x'o'z' plane
                         float vertStep = (2 * PI) / subdivisions;
@@ -882,13 +886,12 @@ public:
 
                                 point += circle_origin;
 
-                                vbuff.push_back({ point, color });
+                                vbuff.push_back({ point, color,  glm::normalize(point - circle_origin) });
                         }
-
-                        previousTangent = tangent;
                 }
 
                 // final point to close the cylinder
+                // TODO same as top point
                 vbuff.push_back({ controlPoints[controlPoints.size() - 1], color });
         
                 // top face
@@ -899,6 +902,7 @@ public:
                         ibuff.push_back(1 + iNext);
                 }
 
+                // TODO this changes just like the cylinder
                 // lateral faces
                 // nasty mesh bug if i let this loop run up to  `< latitude_subdivisions - 1`
                 for (int i = 0; i < segments; i++) {
@@ -1003,7 +1007,7 @@ public:
                                 //glm::vec3 point = r * cos(beta) * up + r * sin(beta) * right;
                                 //point += circleOrigin;
 
-                                vbuff.push_back({ point, color });
+                                vbuff.push_back({ point, color, glm::normalize(point - circleOrigin)});
                         }
                 }
 
@@ -1031,27 +1035,24 @@ public:
                 populate_VkBuffers();
         }
 };
+
 struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
+        glm::mat4 normalMatrix;
 };
 
 class ObjectSettings
 {
 public:
         ObjectSettings() {
-                ubo.object_matrix = glm::mat4(1.0f);
                 ubo.color = glm::vec4(1.0f);
+                ubo.object_matrix = glm::mat4(1.0f);
+                ubo.normalMatrix = glm::mat4(1.0f);
         }
 
         ObjectSettings& set_color(const glm::vec4& color) {
                 ubo.color = color;
-                return *this;
-        }
-
-        ObjectSettings& apply_rotation(float rads, const glm::vec3& rot) {
-                glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
-                ubo.object_matrix = rotationMatrix * ubo.object_matrix;
                 return *this;
         }
 
@@ -1060,13 +1061,22 @@ public:
                 ubo.object_matrix = scaleMatrix * ubo.object_matrix;
                 return *this;
         }
-
+        ObjectSettings& apply_rotation(float rads, const glm::vec3& rot) {
+                glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
+                ubo.object_matrix = rotationMatrix * ubo.object_matrix;
+                return *this;
+        }
         ObjectSettings& apply_translation(const glm::vec3& tr) {
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), tr);
                 ubo.object_matrix = translationMatrix * ubo.object_matrix;
                 return *this;
         }
         
+        ObjectSettings& compute_normals_matrix() {
+                ubo.normalMatrix = glm::transpose(glm::inverse(ubo.object_matrix));
+                return *this;
+        }
+
         glm::mat4 get_object_matrix() {
                 return ubo.object_matrix;
         }
@@ -1074,7 +1084,6 @@ public:
         UniformBufferObject get_ubo() {
                 return ubo;
         }
-        
         ObjectSettings& reset() {
                 ubo.object_matrix = glm::mat4(1.0f);
                 return *this;
@@ -1475,6 +1484,7 @@ int main(int argc, char** argv) {
 
         // CornellBox settings
         UniformBufferObject ubo_cornellBox = ubo_builder
+                .compute_normals_matrix()
                 .get_ubo();
         glm::mat4 model_cornell = ubo_cornellBox.object_matrix;
         ubo_cornellBox.object_matrix = main_camera.get_proj_view_matrix() * model_cornell;
@@ -1489,6 +1499,7 @@ int main(int argc, char** argv) {
                 .apply_rotation((float)glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f))
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
+                .compute_normals_matrix()
                 .get_ubo();
         glm::mat4 model_cube = ubo_cube.object_matrix;
         ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * model_cube;
@@ -1502,6 +1513,7 @@ int main(int argc, char** argv) {
         UniformBufferObject ubo_cylinder = ubo_builder
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.3f * glm::vec3(0, 1, 0))
+                .compute_normals_matrix()
                 .get_ubo();
         glm::mat4 model_cylinder = ubo_cylinder.object_matrix;
         ubo_cylinder.object_matrix = main_camera.get_proj_view_matrix() * model_cylinder;
@@ -1514,6 +1526,7 @@ int main(int argc, char** argv) {
         // Bezier Cylinder settings
         UniformBufferObject ubo_bezier_cyl = ubo_builder
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
+                .compute_normals_matrix()
                 .get_ubo();
         glm::mat4 model_bezier_cyl= ubo_bezier_cyl.object_matrix;
         ubo_bezier_cyl.object_matrix = main_camera.get_proj_view_matrix() * model_bezier_cyl;
@@ -1527,6 +1540,7 @@ int main(int argc, char** argv) {
         UniformBufferObject ubo_sphere = ubo_builder
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
+                .compute_normals_matrix()
                 .get_ubo();
         glm::mat4 model_shpere = ubo_sphere.object_matrix;
         ubo_sphere.object_matrix = main_camera.get_proj_view_matrix() * model_shpere;
@@ -1540,6 +1554,7 @@ int main(int argc, char** argv) {
         UniformBufferObject ubo_torus = ubo_builder
                 .apply_rotation(glm::radians(45.0f), glm::vec3(1,0,0))
                 .apply_scale(glm::vec3(1, 1.5f, 1))
+                .compute_normals_matrix()
                 .get_ubo();
         glm::mat4 model_torus = ubo_torus.object_matrix;
         ubo_torus.object_matrix = main_camera.get_proj_view_matrix() * model_torus;
