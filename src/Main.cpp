@@ -1100,6 +1100,12 @@ public:
         }
 };
 
+struct DirectionalLight_UniformBufferObject
+{
+        glm::vec4 color;
+        glm::vec4 direction;
+};
+
 struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
@@ -1185,6 +1191,25 @@ public:
 
                 vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
         }
+
+        static void updateDescriptorSets_DirectionalLight(VkBuffer& uniform_buffer1, VkDescriptorSet& descriptorSet1, VkDevice vk_device) {
+                VkDescriptorBufferInfo bufferInfo1 = {};
+                bufferInfo1.buffer = uniform_buffer1;
+                bufferInfo1.offset = 0;
+                bufferInfo1.range = sizeof(DirectionalLight_UniformBufferObject);
+
+                VkWriteDescriptorSet write1 = {};
+                write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                write1.dstSet = descriptorSet1;
+                write1.dstBinding = 0;
+                write1.dstArrayElement = 0;
+                write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                write1.descriptorCount = 1;
+                write1.pBufferInfo = &bufferInfo1;
+
+                vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
+        }
+
 private:
         UniformBufferObject ubo;
 };
@@ -1637,6 +1662,12 @@ int main(int argc, char** argv) {
         glm::mat4 model_torus = ubo_torus.object_matrix;
         ubo_torus.object_matrix = main_camera.get_proj_view_matrix() * model_torus;
         VkBuffer torus_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_torus);
+
+        DirectionalLight_UniformBufferObject dirLight;
+        dirLight.color = glm::vec4(0, 0, 0, 0);
+        dirLight.direction = glm::vec4(0, 0, 0, 0);
+        VkBuffer dirLight_vk_buffer = vklCreateHostCoherentBufferAndUploadData(&dirLight, sizeof(DirectionalLight_UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+
 #pragma endregion
 
         CornellBox cornellBox = CornellBox(3, 3, 3);
@@ -1656,15 +1687,17 @@ int main(int argc, char** argv) {
 
 #pragma region Uniform buffer
 #pragma region descriptor pool
+    uint32_t poolCount = 32;
+    
     VkDescriptorPoolSize poolSize = {};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = 8;
+    poolSize.descriptorCount = poolCount;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = 1;
     poolInfo.pPoolSizes = &poolSize;
-    poolInfo.maxSets = 8;
+    poolInfo.maxSets = poolCount;
 
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     if (vkCreateDescriptorPool(vk_device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
@@ -1719,7 +1752,12 @@ int main(int argc, char** argv) {
     VkDescriptorSet descriptorSet_torus = VK_NULL_HANDLE;
     if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_torus) != VK_SUCCESS)
             VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 6");
-    // note i have 8 total descriptors reserved!
+
+    VkDescriptorSet descriptorSet_directionaLight = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_directionaLight) != VK_SUCCESS)
+            VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 6");
+
+    // note i have 32 total descriptors reserved!
 
 #pragma endregion
 
@@ -1729,6 +1767,7 @@ int main(int argc, char** argv) {
     ObjectSettings::updateDescriptorSets(bezier_cylinder_uniform_buffer, descriptorSet_bez_cyl, vk_device);
     ObjectSettings::updateDescriptorSets(sphere_uniform_buffer, descriptorSet_sphere, vk_device);
     ObjectSettings::updateDescriptorSets(torus_uniform_buffer, descriptorSet_torus, vk_device);
+    ObjectSettings::updateDescriptorSets_DirectionalLight(dirLight_vk_buffer, descriptorSet_directionaLight, vk_device);
 
     auto cornellPipelines = pipeline_factory(cornellBox_vertexShader_path, cornellBox_fragmentShader_path);
     auto objectsPipeline = pipeline_factory(cube_vertexShader_path, cube_fragmentShader_path);
@@ -1828,6 +1867,7 @@ int main(int argc, char** argv) {
     vklDestroyHostCoherentBufferAndItsBackingMemory(bezier_cylinder_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(sphere_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(torus_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(dirLight_vk_buffer);
 
     vklDestroyDeviceLocalImageAndItsBackingMemory(depth_buffer);
     
