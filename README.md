@@ -50,7 +50,7 @@ Windows path length is a major problem often, it is restricted to 260 characters
 - right mouse btn: strafe camera
 - scroll wheel: zoom in / out
 
-- F: reset camera position
+- Z: reset camera position
 
 - F1: wireframe on / off
 - F2: cycle: cull modes (none, front, back)
