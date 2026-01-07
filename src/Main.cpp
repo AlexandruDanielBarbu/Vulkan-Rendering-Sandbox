@@ -96,14 +96,17 @@ std::vector<size_t> cullModes = {
 };
 size_t selectedCullMode = 0;
 
+bool normalMode = false;
+bool fresnelMode = false;
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-    if (key == GLFW_KEY_F && action == GLFW_PRESS)
+    if (key == GLFW_KEY_Z && action == GLFW_PRESS)
             reset_camera = true;
-    if (key == GLFW_KEY_F && action == GLFW_RELEASE)
+    if (key == GLFW_KEY_Z && action == GLFW_RELEASE)
             reset_camera = false;
 
     if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
@@ -114,6 +117,12 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             selectedCullMode++;
             selectedCullMode %= cullModes.size();
     }
+
+    if (key == GLFW_KEY_N && action == GLFW_PRESS)
+            normalMode = !normalMode;
+
+    if (key == GLFW_KEY_F && action == GLFW_PRESS)
+            fresnelMode = !fresnelMode;
 }
 
 bool left_mouse_btn_pressed = false;
@@ -1095,6 +1104,7 @@ struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
         glm::mat4 normalMatrix;
+        glm::ivec4 drawModes;
 };
 
 class ObjectSettings
@@ -1129,6 +1139,11 @@ public:
         
         ObjectSettings& compute_normals_matrix() {
                 ubo.normalMatrix = glm::transpose(glm::inverse(ubo.object_matrix));
+                return *this;
+        }
+
+        ObjectSettings& uploadDrawModes(int normals, int fresnel) {
+                ubo.drawModes = glm::ivec4(normals, fresnel, 0, 0);
                 return *this;
         }
 
@@ -1190,8 +1205,6 @@ int main(int argc, char** argv) {
         bool fullscreen = false;
         std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
 #pragma endregion
-
-
 #pragma region load camera settings
         // GCG framework stuff
         std::string init_camera_filepath = "assets/settings/camera_front.ini";
@@ -1201,8 +1214,6 @@ int main(int argc, char** argv) {
 
         Camera main_camera(init_camera_filepath, window_width, window_height);
 #pragma endregion
-
-
 #pragma region load render settings
         std::string init_renderer_filepath = "assets/settings/renderer_standard.ini";
         if (cmdline_args.init_renderer) {
@@ -1214,6 +1225,12 @@ int main(int argc, char** argv) {
         bool with_backface_culling = renderer_reader.GetBoolean("renderer",
                 "backface_culling", false);
         if (with_backface_culling) selectedCullMode = 2;
+#pragma endregion
+#pragma region load user preferred view mode
+        init_renderer_filepath = "assets/settings/renderer_standard.ini";
+        INIReader renderer_reader2(init_renderer_filepath);
+        normalMode = renderer_reader2.GetBoolean("renderer", "normals", false);
+        fresnelMode = renderer_reader2.GetBoolean("renderer", "fresnel", true);
 #pragma endregion
 
 #pragma endregion
@@ -1536,10 +1553,11 @@ int main(int argc, char** argv) {
 
 #pragma region uniform buffer struct
         ObjectSettings ubo_builder;
-
+        
         // CornellBox settings
         UniformBufferObject ubo_cornellBox = ubo_builder
                 .compute_normals_matrix()
+                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
         glm::mat4 model_cornell = ubo_cornellBox.object_matrix;
         ubo_cornellBox.object_matrix = main_camera.get_proj_view_matrix() * model_cornell;
@@ -1555,6 +1573,7 @@ int main(int argc, char** argv) {
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
                 .compute_normals_matrix()
+                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
         glm::mat4 model_cube = ubo_cube.object_matrix;
         ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * model_cube;
@@ -1569,6 +1588,7 @@ int main(int argc, char** argv) {
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.3f * glm::vec3(0, 1, 0))
                 .compute_normals_matrix()
+                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
         glm::mat4 model_cylinder = ubo_cylinder.object_matrix;
         ubo_cylinder.object_matrix = main_camera.get_proj_view_matrix() * model_cylinder;
@@ -1582,6 +1602,7 @@ int main(int argc, char** argv) {
         UniformBufferObject ubo_bezier_cyl = ubo_builder
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .compute_normals_matrix()
+                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
         glm::mat4 model_bezier_cyl= ubo_bezier_cyl.object_matrix;
         ubo_bezier_cyl.object_matrix = main_camera.get_proj_view_matrix() * model_bezier_cyl;
@@ -1596,6 +1617,7 @@ int main(int argc, char** argv) {
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
                 .compute_normals_matrix()
+                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
         glm::mat4 model_shpere = ubo_sphere.object_matrix;
         ubo_sphere.object_matrix = main_camera.get_proj_view_matrix() * model_shpere;
@@ -1610,6 +1632,7 @@ int main(int argc, char** argv) {
                 .apply_rotation(glm::radians(45.0f), glm::vec3(1,0,0))
                 .apply_scale(glm::vec3(1, 1.5f, 1))
                 .compute_normals_matrix()
+                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
         glm::mat4 model_torus = ubo_torus.object_matrix;
         ubo_torus.object_matrix = main_camera.get_proj_view_matrix() * model_torus;
@@ -1728,18 +1751,23 @@ int main(int argc, char** argv) {
         
         // update ubo
         ubo_cornellBox.object_matrix = proj_view * model_cornell;
+        ubo_cornellBox.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cornell_uniform_buffer, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
         ubo_cube.object_matrix = proj_view * model_cube;
+        ubo_cube.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cube_uniform_buffer, &ubo_cube, sizeof(ubo_cube));
 
         ubo_cylinder.object_matrix = proj_view * model_cylinder;
+        ubo_cylinder.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cylinder_uniform_buffer, &ubo_cylinder, sizeof(ubo_cylinder));
 
         ubo_bezier_cyl.object_matrix = proj_view * model_bezier_cyl;
+        ubo_bezier_cyl.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(bezier_cylinder_uniform_buffer, &ubo_bezier_cyl, sizeof(ubo_bezier_cyl));
 
         ubo_sphere.object_matrix = proj_view * model_shpere;
+        ubo_sphere.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(sphere_uniform_buffer, &ubo_sphere, sizeof(ubo_sphere));
 
         ubo_torus.object_matrix = proj_view * model_torus;
@@ -1755,7 +1783,7 @@ int main(int argc, char** argv) {
         alexd_drawObject(vk_pipeline, descriptorSet_cyl, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
         alexd_drawObject(vk_pipeline, descriptorSet_bez_cyl, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
         alexd_drawObject(vk_pipeline, descriptorSet_sphere, sphere.get_vk_vbuff(), sphere.get_vk_ibuff(), static_cast<uint32_t>(sphere.get_ibuff_size()));
-        alexd_drawObject(vk_pipeline, descriptorSet_torus, torus.get_vk_vbuff(), torus.get_vk_ibuff(), static_cast<uint32_t>(torus.get_ibuff_size()));
+        //alexd_drawObject(vk_pipeline, descriptorSet_torus, torus.get_vk_vbuff(), torus.get_vk_ibuff(), static_cast<uint32_t>(torus.get_ibuff_size()));
         
         vklEndRecordingCommands();
         vklPresentCurrentSwapchainImage();
