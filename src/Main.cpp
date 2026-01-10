@@ -309,9 +309,23 @@ void populate_pipeline_configs(
         };
 
         // ubo setup
-        config.descriptorLayout.resize(1, {});
+        config.descriptorLayout.resize(3, {});
         config.descriptorLayout[0] = {
                 0,                                                              // .binding 
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
+                1,                                                              // .descriptorCount 
+                VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
+                nullptr                                                         // .pImmutableSamplers 
+        };
+        config.descriptorLayout[1] = {
+                1,                                                              // .binding 
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
+                1,                                                              // .descriptorCount 
+                VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
+                nullptr                                                         // .pImmutableSamplers 
+        };
+        config.descriptorLayout[2] = {
+                2,                                                              // .binding 
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
                 1,                                                              // .descriptorCount 
                 VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
@@ -1106,6 +1120,14 @@ struct DirectionalLight_UniformBufferObject
         glm::vec4 direction;
 };
 
+struct PointLight_UniformBufferObject
+{
+        glm::vec4 color;
+        glm::vec4 position;
+        // [c, l, q, <unused>]
+        glm::vec4 attenuation;
+};
+
 struct UniformBufferObject {
         glm::vec4 color;
         glm::mat4 object_matrix;
@@ -1201,7 +1223,7 @@ public:
                 VkWriteDescriptorSet write1 = {};
                 write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
                 write1.dstSet = descriptorSet1;
-                write1.dstBinding = 0;
+                write1.dstBinding = 1;
                 write1.dstArrayElement = 0;
                 write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 write1.descriptorCount = 1;
@@ -1210,8 +1232,148 @@ public:
                 vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
         }
 
+        static void updateDescriptorSets_PointLight(VkBuffer& uniform_buffer1, VkDescriptorSet& descriptorSet1, VkDevice vk_device) {
+                VkDescriptorBufferInfo bufferInfo1 = {};
+                bufferInfo1.buffer = uniform_buffer1;
+                bufferInfo1.offset = 0;
+                bufferInfo1.range = sizeof(PointLight_UniformBufferObject);
+
+                VkWriteDescriptorSet write1 = {};
+                write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                write1.dstSet = descriptorSet1;
+                write1.dstBinding = 2;
+                write1.dstArrayElement = 0;
+                write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                write1.descriptorCount = 1;
+                write1.pBufferInfo = &bufferInfo1;
+
+                vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
+        }
 private:
         UniformBufferObject ubo;
+};
+
+class UBOManager{
+public:
+        const uint32_t poolCount = 32;
+        
+        VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+        VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+
+
+        void initialize(VkDevice vk_device) {
+                //-----------------------------
+
+                poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                poolSize.descriptorCount = poolCount * 3;
+
+                poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+                poolInfo.poolSizeCount = 1;
+                poolInfo.pPoolSizes = &poolSize;
+                poolInfo.maxSets = poolCount;
+
+                if (vkCreateDescriptorPool(vk_device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
+                        VKL_EXIT_WITH_ERROR("Failed to create descriptor pool");
+
+                //-----------------------------
+                
+                // Object UBO
+                bindings[0].binding = 0;
+                bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                bindings[0].descriptorCount = 1;
+                bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+                bindings[0].pImmutableSamplers = nullptr;
+
+                // Directional light UBO
+                bindings[1].binding = 1;
+                bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                bindings[1].descriptorCount = 1;
+                bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+                bindings[1].pImmutableSamplers = nullptr;
+
+                // Point light UBO
+                bindings[2].binding = 2;
+                bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                bindings[2].descriptorCount = 1;
+                bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+                bindings[2].pImmutableSamplers = nullptr;
+
+                layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+                layoutInfo.bindingCount = 3;
+                layoutInfo.pBindings = bindings;
+
+                if (vkCreateDescriptorSetLayout(vk_device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
+                        VKL_EXIT_WITH_ERROR("Failed to create descriptor set layout");
+                
+                //---------------------------
+                
+                allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                allocInfo.descriptorPool = descriptorPool;
+                allocInfo.descriptorSetCount = 1;
+                allocInfo.pSetLayouts = &descriptorSetLayout;
+                
+                //---------------------------
+        }
+
+        VkDescriptorSet allocateDescriptorSets(VkDevice vk_device) {
+                VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+                if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet) != VK_SUCCESS)
+                        VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 1");
+
+                return descriptorSet;
+        }
+
+        void updateDescriptorSetAll(
+                VkDevice vk_device,
+                VkDescriptorSet descriptorSet,
+                
+                VkBuffer objectBuffer,
+                VkDeviceSize objectSize,
+                
+                VkBuffer directionalBuffer,
+                VkDeviceSize directionalSize,
+                
+                VkBuffer pointBuffer,
+                VkDeviceSize pointSize) {
+
+                VkDescriptorBufferInfo bufferInfos[3] = {};
+                bufferInfos[0] = { objectBuffer, 0, objectSize };
+                bufferInfos[1] = { directionalBuffer, 0, directionalSize };
+                bufferInfos[2] = { pointBuffer, 0, pointSize };
+
+                VkWriteDescriptorSet writes[3] = {};
+                for (uint32_t i = 0; i < 3; ++i) {
+                        writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                        writes[i].dstSet = descriptorSet;
+                        writes[i].dstBinding = i;
+                        writes[i].dstArrayElement = 0;
+                        writes[i].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                        writes[i].descriptorCount = 1;
+                        writes[i].pBufferInfo = &bufferInfos[i];
+                }
+
+                vkUpdateDescriptorSets(vk_device, 3, writes, 0, nullptr);
+        }
+
+        void cleanup(VkDevice vk_device) {
+                if (descriptorSetLayout != VK_NULL_HANDLE) {
+                        vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
+                        descriptorSetLayout = VK_NULL_HANDLE;
+                }
+                if (descriptorPool != VK_NULL_HANDLE) {
+                        vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
+                        descriptorPool = VK_NULL_HANDLE;
+                }
+        }
+private:
+        VkDescriptorPoolSize poolSize = {};
+        VkDescriptorPoolCreateInfo poolInfo = {};
+        VkDescriptorSetLayoutBinding bindings[3] = {};
+        VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+        VkDescriptorSetAllocateInfo allocInfo = {};
+
+
 };
 #pragma endregion
 
@@ -1576,7 +1738,7 @@ int main(int argc, char** argv) {
         std::string cornellBox_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
 #pragma endregion
 
-#pragma region uniform buffer struct
+#pragma region Object UBO
         ObjectSettings ubo_builder;
         
         // CornellBox settings
@@ -1662,14 +1824,26 @@ int main(int argc, char** argv) {
         glm::mat4 model_torus = ubo_torus.object_matrix;
         ubo_torus.object_matrix = main_camera.get_proj_view_matrix() * model_torus;
         VkBuffer torus_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_torus);
+#pragma endregion
 
+#pragma region Light UBO
+        // Directional Light
         DirectionalLight_UniformBufferObject dirLight;
         dirLight.color = glm::vec4(0, 0, 0, 0);
         dirLight.direction = glm::vec4(0, 0, 0, 0);
         VkBuffer dirLight_vk_buffer = vklCreateHostCoherentBufferAndUploadData(&dirLight, sizeof(DirectionalLight_UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
+        // Point Light
+        PointLight_UniformBufferObject pointLight;
+        pointLight.color = glm::vec4(0, 0, 0, 0);
+        pointLight.position = glm::vec4(0, 0, 0, 0);
+        pointLight.attenuation = glm::vec4(0, 0, 0, 0);
+        VkBuffer pointLight_vk_buffer = vklCreateHostCoherentBufferAndUploadData(&pointLight, sizeof(PointLight_UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+
 #pragma endregion
 
+
+#pragma region Objects of the scene
         CornellBox cornellBox = CornellBox(3, 3, 3);
         Cube cube = Cube(0.34f, 0.34f, 0.34f, { 0.0, 0.21, 0.16 });
         Cylinder cylinder = Cylinder(0.21f, 1.6, 20, { 0.75, 0.25, 0.01 });
@@ -1684,9 +1858,10 @@ int main(int argc, char** argv) {
         Bezier curve(controlPoints, 0.21f, 36, 20, { 0.75, 0.25, 0.01 });
         Sphere sphere = Sphere(0.26f, 18, 36, { 0.12, 0.12, 0.12 });
         Torus torus = Torus(1.1f, 0.1f, 32, 8, { 0,0,0 }, { 0.38, 0.67, 0.84 });
+#pragma endregion
 
 #pragma region Uniform buffer
-#pragma region descriptor pool
+#pragma region ported
     uint32_t poolCount = 32;
     
     VkDescriptorPoolSize poolSize = {};
@@ -1704,7 +1879,7 @@ int main(int argc, char** argv) {
         VKL_EXIT_WITH_ERROR("Failed to create descriptor pool");
 #pragma endregion
     
-#pragma region descriptor set layout
+#pragma region ported
     VkDescriptorSetLayoutBinding layoutBinding = {};
     layoutBinding.binding = 0;
     layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1721,8 +1896,44 @@ int main(int argc, char** argv) {
     if (vkCreateDescriptorSetLayout(vk_device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
         VKL_EXIT_WITH_ERROR("Failed to create descriptor set layout");
 #pragma endregion
-    
-#pragma region allocate the descriptor sets
+
+#pragma region don't need
+    VkDescriptorSetLayoutBinding layoutBinding_directionalLight = {};
+    layoutBinding_directionalLight.binding = 1;
+    layoutBinding_directionalLight.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layoutBinding_directionalLight.descriptorCount = 1;
+    layoutBinding_directionalLight.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    layoutBinding_directionalLight.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo_directionalLight = {};
+    layoutInfo_directionalLight.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo_directionalLight.bindingCount = 1;
+    layoutInfo_directionalLight.pBindings = &layoutBinding_directionalLight;
+
+    VkDescriptorSetLayout descriptorSetLayout_directionalLight = VK_NULL_HANDLE;
+    if (vkCreateDescriptorSetLayout(vk_device, &layoutInfo_directionalLight, nullptr, &descriptorSetLayout_directionalLight) != VK_SUCCESS)
+            VKL_EXIT_WITH_ERROR("Failed to create descriptor set layout");
+#pragma endregion
+
+#pragma region don't need
+    VkDescriptorSetLayoutBinding layoutBinding_pointLight = {};
+    layoutBinding_pointLight.binding = 2;
+    layoutBinding_pointLight.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layoutBinding_pointLight.descriptorCount = 1;
+    layoutBinding_pointLight.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    layoutBinding_pointLight.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo_pointLight = {};
+    layoutInfo_pointLight.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo_pointLight.bindingCount = 1;
+    layoutInfo_pointLight.pBindings = &layoutBinding_pointLight;
+
+    VkDescriptorSetLayout descriptorSetLayout_pointLight = VK_NULL_HANDLE;
+    if (vkCreateDescriptorSetLayout(vk_device, &layoutInfo_pointLight, nullptr, &descriptorSetLayout_pointLight) != VK_SUCCESS)
+            VKL_EXIT_WITH_ERROR("Failed to create descriptor set layout");
+#pragma endregion
+
+#pragma region ported the struct
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool;
@@ -1752,14 +1963,36 @@ int main(int argc, char** argv) {
     VkDescriptorSet descriptorSet_torus = VK_NULL_HANDLE;
     if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_torus) != VK_SUCCESS)
             VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 6");
+#pragma endregion
+
+#pragma region Allocate the decriptor sets - Directional light
+    VkDescriptorSetAllocateInfo allocInfo_directionalLight = {};
+    allocInfo_directionalLight.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo_directionalLight.descriptorPool = descriptorPool;
+    allocInfo_directionalLight.descriptorSetCount = 1;
+    allocInfo_directionalLight.pSetLayouts = &descriptorSetLayout_directionalLight;
 
     VkDescriptorSet descriptorSet_directionaLight = VK_NULL_HANDLE;
-    if (vkAllocateDescriptorSets(vk_device, &allocInfo, &descriptorSet_directionaLight) != VK_SUCCESS)
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo_directionalLight, &descriptorSet_directionaLight) != VK_SUCCESS)
             VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 6");
+#pragma endregion
+
+#pragma region Allocate the decriptor sets - Point light
+    VkDescriptorSetAllocateInfo allocInfo_pointLight = {};
+    allocInfo_pointLight.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo_pointLight.descriptorPool = descriptorPool;
+    allocInfo_pointLight.descriptorSetCount = 1;
+    allocInfo_pointLight.pSetLayouts = &descriptorSetLayout_pointLight;
+
+    VkDescriptorSet descriptorSet_pointLight = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(vk_device, &allocInfo_pointLight, &descriptorSet_pointLight) != VK_SUCCESS)
+            VKL_EXIT_WITH_ERROR("Failed to allocate descriptor set 6");
+#pragma endregion
+
+#pragma endregion
 
     // note i have 32 total descriptors reserved!
 
-#pragma endregion
 
     ObjectSettings::updateDescriptorSets(cornell_uniform_buffer, descriptorSet_cornell, vk_device);
     ObjectSettings::updateDescriptorSets(cube_uniform_buffer, descriptorSet_cube, vk_device);
@@ -1767,7 +2000,10 @@ int main(int argc, char** argv) {
     ObjectSettings::updateDescriptorSets(bezier_cylinder_uniform_buffer, descriptorSet_bez_cyl, vk_device);
     ObjectSettings::updateDescriptorSets(sphere_uniform_buffer, descriptorSet_sphere, vk_device);
     ObjectSettings::updateDescriptorSets(torus_uniform_buffer, descriptorSet_torus, vk_device);
+
+    // Light
     ObjectSettings::updateDescriptorSets_DirectionalLight(dirLight_vk_buffer, descriptorSet_directionaLight, vk_device);
+    ObjectSettings::updateDescriptorSets_PointLight(pointLight_vk_buffer, descriptorSet_pointLight, vk_device);
 
     auto cornellPipelines = pipeline_factory(cornellBox_vertexShader_path, cornellBox_fragmentShader_path);
     auto objectsPipeline = pipeline_factory(cube_vertexShader_path, cube_fragmentShader_path);
@@ -1853,6 +2089,8 @@ int main(int argc, char** argv) {
 
     vkDestroyDescriptorPool(vk_device, descriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout_directionalLight, nullptr);
+    vkDestroyDescriptorSetLayout(vk_device, descriptorSetLayout_pointLight, nullptr);
     
     cube.destroyVkBuffers();
     cornellBox.destroyVkBuffers();
@@ -1868,6 +2106,7 @@ int main(int argc, char** argv) {
     vklDestroyHostCoherentBufferAndItsBackingMemory(sphere_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(torus_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(dirLight_vk_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(pointLight_vk_buffer);
 
     vklDestroyDeviceLocalImageAndItsBackingMemory(depth_buffer);
     
