@@ -1830,15 +1830,15 @@ int main(int argc, char** argv) {
 #pragma region Light UBO
         // Directional Light
         DirectionalLight_UniformBufferObject dirLight;
-        dirLight.color = glm::vec4(1, 1, 0, 0);
-        dirLight.direction = main_camera.getView() * glm::vec4(1, 0, 0, 0);  // w is 0!!!
+        dirLight.color = glm::vec4(0.85f, 0.85f, 0.85f, 0);
+        dirLight.direction = main_camera.getView() * glm::vec4(0, 1, -1, 0);  // w is 0!!!
         VkBuffer dirLight_vk_buffer = vklCreateHostCoherentBufferAndUploadData(&dirLight, sizeof(DirectionalLight_UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
         // Point Light
         PointLight_UniformBufferObject pointLight;
-        pointLight.color = glm::vec4(1, 1, 0, 0);
-        pointLight.position = main_camera.getView() * glm::vec4(1, 1, 1, 1); // w is 1!!
-        pointLight.attenuation = glm::vec4(1, 1, 1, 0);
+        pointLight.color = glm::vec4(1, 1, 1, 0);
+        pointLight.position = main_camera.getView() * glm::vec4(0, 0, 0, 1); // w is 1!!
+        pointLight.attenuation = glm::vec4(1.0f, 0.4f, 0.1f, 0);
         VkBuffer pointLight_vk_buffer = vklCreateHostCoherentBufferAndUploadData(&pointLight, sizeof(PointLight_UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
 #pragma endregion
