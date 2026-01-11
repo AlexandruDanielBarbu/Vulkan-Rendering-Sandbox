@@ -409,7 +409,8 @@ public:
                 compute_camera_pos();
         }
 
-        glm::mat4 get_proj_view_matrix(const double deltax = 0, const double deltay = 0) {
+        glm::mat4 getProjection() { return proj; }
+        glm::mat4 getView(const double deltax = 0, const double deltay = 0) {
                 // arcball
                 if (left_mouse_btn_pressed) {
                         camera_yaw += deltax * arcball_sensitivity;
@@ -420,7 +421,7 @@ public:
 
                         compute_camera_pos();
                         //force return, my job here is done
-                        return proj * myLookAt();
+                        return myLookAt();
                 }
 
                 // strafing
@@ -438,12 +439,12 @@ public:
                         target += (float)(strafe_sensitivity * deltay) * camera_up;
                         camera_pos += (float)(strafe_sensitivity * deltay) * camera_up;
 
-                        return proj * myLookAt();
+                        return myLookAt();
                 }
 
                 // else rerturrn what is there
                 compute_camera_pos();
-                return proj * myLookAt();
+                return myLookAt();
         }
 
         void reset_camera_state() {
@@ -459,6 +460,7 @@ public:
 
                 if (camera_zoom_level < 0) camera_zoom_level = 0;
         }
+
 private:
         const double arcball_sensitivity = 0.01;
         const double strafe_sensitivity = 0.01;
@@ -1129,61 +1131,104 @@ struct PointLight_UniformBufferObject
 };
 
 struct UniformBufferObject {
-        glm::vec4 color;
-        glm::mat4 object_matrix;
-        glm::mat4 normalMatrix;
         glm::ivec4 drawModes;
+        
+        glm::vec4 color;
+        
+        glm::mat4 matrix_model;
+        glm::mat4 matrix_view;
+        glm::mat4 matrix_projection;
+
+        glm::mat4 matrix_normals;
 };
 
 class ObjectSettings
 {
+private:
+        UniformBufferObject ubo = {};
+
 public:
         ObjectSettings() {
                 ubo.color = glm::vec4(1.0f);
-                ubo.object_matrix = glm::mat4(1.0f);
-                ubo.normalMatrix = glm::mat4(1.0f);
+
+                ubo.matrix_model = glm::mat4(1.0f);
+                ubo.matrix_view = glm::mat4(1.0f);
+                ubo.matrix_projection = glm::mat4(1.0f);
+                
+                ubo.matrix_normals = glm::mat4(1.0f);
         }
 
+        // DrawModes
+        ObjectSettings& uploadDrawModes(int normals, int fresnel) {
+                ubo.drawModes = glm::ivec4(normals, fresnel, 0, 0);
+                
+                return *this;
+        }
+
+        // Color
         ObjectSettings& set_color(const glm::vec4& color) {
                 ubo.color = color;
                 return *this;
         }
 
+        // Model Matrix
         ObjectSettings& apply_scale(const glm::vec3& scale) {
                 glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), scale);
-                ubo.object_matrix = scaleMatrix * ubo.object_matrix;
+
+                ubo.matrix_model = scaleMatrix * ubo.matrix_model;
+
                 return *this;
         }
         ObjectSettings& apply_rotation(float rads, const glm::vec3& rot) {
                 glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), rads, rot);
-                ubo.object_matrix = rotationMatrix * ubo.object_matrix;
+
+                ubo.matrix_model = rotationMatrix * ubo.matrix_model;
+                
                 return *this;
         }
         ObjectSettings& apply_translation(const glm::vec3& tr) {
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), tr);
-                ubo.object_matrix = translationMatrix * ubo.object_matrix;
+
+                ubo.matrix_model = translationMatrix * ubo.matrix_model;
+                
                 return *this;
         }
         
+        // View Matrix
+        ObjectSettings& setViewMatrix(glm::mat4 view_matrix) {
+                ubo.matrix_view = view_matrix;
+
+                return *this;
+        }
+
+        // Perspective Matrix
+        ObjectSettings& setProjectionMatrix(glm::mat4 projection_matrix) {
+                ubo.matrix_projection = projection_matrix;
+
+                return *this;
+        }
+
+        // Normals Matrix
         ObjectSettings& compute_normals_matrix() {
-                ubo.normalMatrix = glm::transpose(glm::inverse(ubo.object_matrix));
-                return *this;
-        }
+                // NOTE: I use ViewSpace for lighting!!
+                ubo.matrix_normals = glm::transpose(glm::inverse(ubo.matrix_view * ubo.matrix_model));
 
-        ObjectSettings& uploadDrawModes(int normals, int fresnel) {
-                ubo.drawModes = glm::ivec4(normals, fresnel, 0, 0);
                 return *this;
-        }
-
-        glm::mat4 get_object_matrix() {
-                return ubo.object_matrix;
         }
 
         UniformBufferObject get_ubo() {
                 return ubo;
         }
+
         ObjectSettings& reset() {
-                ubo.object_matrix = glm::mat4(1.0f);
+                ubo = {};
+
+                ubo.matrix_model = glm::mat4(1.0f);
+                ubo.matrix_view = glm::mat4(1.0f);
+                ubo.matrix_projection = glm::mat4(1.0f);
+
+                ubo.matrix_normals = glm::mat4(1.0f);
+
                 return *this;
         }
 
@@ -1195,62 +1240,6 @@ public:
 
                 return buffer;
         }
-
-        static void updateDescriptorSets(VkBuffer& uniform_buffer1, VkDescriptorSet& descriptorSet1, VkDevice vk_device) {
-                VkDescriptorBufferInfo bufferInfo1 = {};
-                bufferInfo1.buffer = uniform_buffer1;
-                bufferInfo1.offset = 0;
-                bufferInfo1.range = sizeof(UniformBufferObject);
-
-                VkWriteDescriptorSet write1 = {};
-                write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                write1.dstSet = descriptorSet1;
-                write1.dstBinding = 0;
-                write1.dstArrayElement = 0;
-                write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                write1.descriptorCount = 1;
-                write1.pBufferInfo = &bufferInfo1;
-
-                vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
-        }
-
-        static void updateDescriptorSets_DirectionalLight(VkBuffer& uniform_buffer1, VkDescriptorSet& descriptorSet1, VkDevice vk_device) {
-                VkDescriptorBufferInfo bufferInfo1 = {};
-                bufferInfo1.buffer = uniform_buffer1;
-                bufferInfo1.offset = 0;
-                bufferInfo1.range = sizeof(DirectionalLight_UniformBufferObject);
-
-                VkWriteDescriptorSet write1 = {};
-                write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                write1.dstSet = descriptorSet1;
-                write1.dstBinding = 1;
-                write1.dstArrayElement = 0;
-                write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                write1.descriptorCount = 1;
-                write1.pBufferInfo = &bufferInfo1;
-
-                vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
-        }
-
-        static void updateDescriptorSets_PointLight(VkBuffer& uniform_buffer1, VkDescriptorSet& descriptorSet1, VkDevice vk_device) {
-                VkDescriptorBufferInfo bufferInfo1 = {};
-                bufferInfo1.buffer = uniform_buffer1;
-                bufferInfo1.offset = 0;
-                bufferInfo1.range = sizeof(PointLight_UniformBufferObject);
-
-                VkWriteDescriptorSet write1 = {};
-                write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                write1.dstSet = descriptorSet1;
-                write1.dstBinding = 2;
-                write1.dstArrayElement = 0;
-                write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                write1.descriptorCount = 1;
-                write1.pBufferInfo = &bufferInfo1;
-
-                vkUpdateDescriptorSets(vk_device, 1, &write1, 0, nullptr);
-        }
-private:
-        UniformBufferObject ubo;
 };
 
 class UBOManager{
@@ -1730,8 +1719,8 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region custom graphics pipeline config
-        std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/testVertex.vert");
-        std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/testFrag.frag");
+        std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/gouraudShadingVert.vert");
+        std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/gouraudShadingFrag.frag");
 
         std::string cornellBox_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
         std::string cornellBox_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
@@ -1744,11 +1733,13 @@ int main(int argc, char** argv) {
         
         // CornellBox settings
         UniformBufferObject ubo_cornellBox = ubo_builder
-                .compute_normals_matrix()
                 .uploadDrawModes(normalMode, fresnelMode)
+                // no color
+                // no model matrix, left to I4
+                .setViewMatrix(main_camera.getView())
+                .setProjectionMatrix(main_camera.getProjection())
+                .compute_normals_matrix()
                 .get_ubo();
-        glm::mat4 model_cornell = ubo_cornellBox.object_matrix;
-        ubo_cornellBox.object_matrix = main_camera.get_proj_view_matrix() * model_cornell;
         VkBuffer cornell_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_cornellBox);
 
 
@@ -1757,14 +1748,15 @@ int main(int argc, char** argv) {
 
         // Cube settings
         UniformBufferObject ubo_cube = ubo_builder
+                .uploadDrawModes(normalMode, fresnelMode)
+                // no color
                 .apply_rotation((float)glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f))
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
+                .setViewMatrix(main_camera.getView())
+                .setProjectionMatrix(main_camera.getProjection())
                 .compute_normals_matrix()
-                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
-        glm::mat4 model_cube = ubo_cube.object_matrix;
-        ubo_cube.object_matrix = main_camera.get_proj_view_matrix() * model_cube;
         VkBuffer cube_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_cube);
 
 
@@ -1773,13 +1765,14 @@ int main(int argc, char** argv) {
 
         // Cylinder settings
         UniformBufferObject ubo_cylinder = ubo_builder
+                .uploadDrawModes(normalMode, fresnelMode)
+                // no color
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.3f * glm::vec3(0, 1, 0))
+                .setViewMatrix(main_camera.getView())
+                .setProjectionMatrix(main_camera.getProjection())
                 .compute_normals_matrix()
-                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
-        glm::mat4 model_cylinder = ubo_cylinder.object_matrix;
-        ubo_cylinder.object_matrix = main_camera.get_proj_view_matrix() * model_cylinder;
         VkBuffer cylinder_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_cylinder);
 
 
@@ -1788,12 +1781,13 @@ int main(int argc, char** argv) {
 
         // Bezier Cylinder settings
         UniformBufferObject ubo_bezier_cyl = ubo_builder
-                .apply_translation(0.6f * glm::vec3(-1, 0, 0))
-                .compute_normals_matrix()
                 .uploadDrawModes(normalMode, fresnelMode)
+                //no color
+                .apply_translation(0.6f * glm::vec3(-1, 0, 0))
+                .setViewMatrix(main_camera.getView())
+                .setProjectionMatrix(main_camera.getProjection())
+                .compute_normals_matrix()
                 .get_ubo();
-        glm::mat4 model_bezier_cyl= ubo_bezier_cyl.object_matrix;
-        ubo_bezier_cyl.object_matrix = main_camera.get_proj_view_matrix() * model_bezier_cyl;
         VkBuffer bezier_cylinder_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_bezier_cyl);
 
 
@@ -1802,13 +1796,14 @@ int main(int argc, char** argv) {
 
         // Sphere settings
         UniformBufferObject ubo_sphere = ubo_builder
+                .uploadDrawModes(normalMode, fresnelMode)
+                // no colors
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
+                .setViewMatrix(main_camera.getView())
+                .setProjectionMatrix(main_camera.getProjection())
                 .compute_normals_matrix()
-                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
-        glm::mat4 model_shpere = ubo_sphere.object_matrix;
-        ubo_sphere.object_matrix = main_camera.get_proj_view_matrix() * model_shpere;
         VkBuffer sphere_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_sphere);
 
         
@@ -1817,28 +1812,29 @@ int main(int argc, char** argv) {
         
         // Torus
         UniformBufferObject ubo_torus = ubo_builder
+                .uploadDrawModes(normalMode, fresnelMode)
+                // no color
                 .apply_rotation(glm::radians(45.0f), glm::vec3(1,0,0))
                 .apply_scale(glm::vec3(1, 1.5f, 1))
+                .setViewMatrix(main_camera.getView())
+                .setProjectionMatrix(main_camera.getProjection())
                 .compute_normals_matrix()
-                .uploadDrawModes(normalMode, fresnelMode)
                 .get_ubo();
-        glm::mat4 model_torus = ubo_torus.object_matrix;
-        ubo_torus.object_matrix = main_camera.get_proj_view_matrix() * model_torus;
         VkBuffer torus_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_torus);
 #pragma endregion
 
 #pragma region Light UBO
         // Directional Light
         DirectionalLight_UniformBufferObject dirLight;
-        dirLight.color = glm::vec4(0, 0, 0, 0);
-        dirLight.direction = glm::vec4(0, 0, 0, 0);
+        dirLight.color = glm::vec4(1, 1, 0, 0);
+        dirLight.direction = main_camera.getView() * glm::vec4(1, 0, 0, 0);  // w is 0!!!
         VkBuffer dirLight_vk_buffer = vklCreateHostCoherentBufferAndUploadData(&dirLight, sizeof(DirectionalLight_UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
         // Point Light
         PointLight_UniformBufferObject pointLight;
-        pointLight.color = glm::vec4(0, 0, 0, 0);
-        pointLight.position = glm::vec4(0, 0, 0, 0);
-        pointLight.attenuation = glm::vec4(0, 0, 0, 0);
+        pointLight.color = glm::vec4(1, 1, 0, 0);
+        pointLight.position = main_camera.getView() * glm::vec4(1, 1, 1, 1); // w is 1!!
+        pointLight.attenuation = glm::vec4(1, 1, 1, 0);
         VkBuffer pointLight_vk_buffer = vklCreateHostCoherentBufferAndUploadData(&pointLight, sizeof(PointLight_UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
 #pragma endregion
@@ -1928,30 +1924,30 @@ int main(int argc, char** argv) {
 
         // move camera logic
         double deltax = {}; double deltay = {}; get_mouse_delta(window, deltax, deltay);
-        glm::mat4 proj_view = main_camera.get_proj_view_matrix(deltax, deltay);
+        glm::mat4 mainCamera_view = main_camera.getView(deltax, deltay);
         
         // update ubo
-        ubo_cornellBox.object_matrix = proj_view * model_cornell;
+        ubo_cornellBox.matrix_view = mainCamera_view;
         ubo_cornellBox.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cornell_uniform_buffer, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
-        ubo_cube.object_matrix = proj_view * model_cube;
+        ubo_cube.matrix_view = mainCamera_view;
         ubo_cube.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cube_uniform_buffer, &ubo_cube, sizeof(ubo_cube));
 
-        ubo_cylinder.object_matrix = proj_view * model_cylinder;
+        ubo_cylinder.matrix_view = mainCamera_view;
         ubo_cylinder.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cylinder_uniform_buffer, &ubo_cylinder, sizeof(ubo_cylinder));
 
-        ubo_bezier_cyl.object_matrix = proj_view * model_bezier_cyl;
+        ubo_bezier_cyl.matrix_view = mainCamera_view;
         ubo_bezier_cyl.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(bezier_cylinder_uniform_buffer, &ubo_bezier_cyl, sizeof(ubo_bezier_cyl));
 
-        ubo_sphere.object_matrix = proj_view * model_shpere;
+        ubo_sphere.matrix_view = mainCamera_view;
         ubo_sphere.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(sphere_uniform_buffer, &ubo_sphere, sizeof(ubo_sphere));
 
-        ubo_torus.object_matrix = proj_view * model_torus;
+        ubo_torus.matrix_view = mainCamera_view;
         vklCopyDataIntoHostCoherentBuffer(torus_uniform_buffer, &ubo_torus, sizeof(ubo_torus));
 
         vklStartRecordingCommands();
