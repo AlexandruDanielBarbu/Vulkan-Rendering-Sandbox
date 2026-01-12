@@ -90,7 +90,6 @@ void main()
 
     fragColor = vec4(finalColor, 1.0);
 
-
     // Show normals as color check
     if (ubo.drawModes.x == 1) {
         vec3 scaledNormal = 0.5 * normalViewSpace + 0.5;

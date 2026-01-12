@@ -1140,6 +1140,7 @@ struct UniformBufferObject {
         glm::mat4 matrix_projection;
 
         glm::mat4 matrix_normals;
+        glm::mat4 view_inverse;
 };
 
 class ObjectSettings
@@ -1156,6 +1157,7 @@ public:
                 ubo.matrix_projection = glm::mat4(1.0f);
                 
                 ubo.matrix_normals = glm::mat4(1.0f);
+                ubo.view_inverse = glm::mat4(1.0f);
         }
 
         // DrawModes
@@ -1197,7 +1199,7 @@ public:
         // View Matrix
         ObjectSettings& setViewMatrix(glm::mat4 view_matrix) {
                 ubo.matrix_view = view_matrix;
-
+                ubo.view_inverse = glm::inverse(ubo.matrix_view);
                 return *this;
         }
 
@@ -1719,11 +1721,11 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region custom graphics pipeline config
-        std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/gouraudShadingVert.vert");
-        std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/gouraudShadingFrag.frag");
+        //std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/gouraudShadingVert.vert");
+        //std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/gouraudShadingFrag.frag");
 
-        //std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/phongShadingVert.vert");
-        //std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/phongShadingFrag.frag");
+        std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/phongShadingVert.vert");
+        std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/phongShadingFrag.frag");
 
 
         std::string cornellBox_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");

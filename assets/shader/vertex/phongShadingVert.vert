@@ -8,6 +8,7 @@ layout(std140, binding = 0) uniform UBO {
     mat4 matrix_view;
     mat4 matrix_projection;
     mat4 matrix_normals;
+    mat4 view_inverse;
 } ubo;
 
 layout(std140, binding = 1) uniform UBO_DirLight {
@@ -33,6 +34,7 @@ layout(location = 4) out vec3 fragDirLightDir;
 layout(location = 5) out vec3 fragPointLightColor;
 layout(location = 6) out vec3 fragPointLightPos;
 layout(location = 7) out vec3 fragPointLightAttenuation;
+layout(location = 8) out mat4 viewInverse;
 
 void main()
 {
@@ -51,6 +53,8 @@ void main()
     fragPointLightColor       = ubo_pointLight.color.rgb;
     fragPointLightPos         = ubo_pointLight.position.xyz;
     fragPointLightAttenuation = ubo_pointLight.attenuation.xyz;
+
+    viewInverse = ubo.view_inverse;
 
     gl_Position = ubo.matrix_projection * vec4(positionVS, 1.0);
 }
