@@ -90,5 +90,17 @@ void main()
 
     fragColor = vec4(finalColor, 1.0);
 
+
+    // Show normals as color check
+    if (ubo.drawModes.x == 1) {
+        vec3 scaledNormal = 0.5 * normalViewSpace + 0.5;
+        fragColor = vec4(
+            pow(scaledNormal.x, 2.2),
+            pow(scaledNormal.y, 2.2),
+            pow(scaledNormal.z, 2.2),
+            1
+        );
+    }
+
     gl_Position = ubo.matrix_projection * vec4(positionViewSpace, 1.0);
 }
