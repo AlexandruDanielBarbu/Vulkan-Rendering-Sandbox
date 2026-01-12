@@ -1719,11 +1719,11 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region custom graphics pipeline config
-        //std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/gouraudShadingVert.vert");
-        //std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/gouraudShadingFrag.frag");
+        std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/gouraudShadingVert.vert");
+        std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/gouraudShadingFrag.frag");
 
-        std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/phongShadingVert.vert");
-        std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/phongShadingFrag.frag");
+        //std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/phongShadingVert.vert");
+        //std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/phongShadingFrag.frag");
 
 
         std::string cornellBox_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
