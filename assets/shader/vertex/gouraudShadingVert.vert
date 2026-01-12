@@ -31,33 +31,21 @@ const float shininess = 32.0;
 const float ambientStrength = 0.1;
 const float specularStrength = 0.5;
 
-void main()
-{
-    // -------------------------------
-    // Transform vertex to view space
-    // -------------------------------
-    vec3 positionViewSpace = (ubo.matrix_view * ubo.matrix_model * vec4(inPosition, 1.0)).xyz;
-    vec3 normalViewSpace   = normalize(mat3(ubo.matrix_normals) * inNormal);
-
-    // Camera is at (0,0,0) in view space
-    vec3 viewDirection = normalize(-positionViewSpace);
-
-    // -------------------------------
-    // Directional light (view space)
-    // -------------------------------
+vec3 computeDirectionalLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 viewDirection) {
     vec3 directionalLightDirection = normalize(-ubo_dirLight.direction.xyz);
     float directionalDiffuse = max(dot(normalViewSpace, directionalLightDirection), 0.0);
+
     vec3 directionalReflection = reflect(-directionalLightDirection, normalViewSpace);
     float directionalSpecular = pow(max(dot(viewDirection, directionalReflection), 0.0), shininess);
 
-    vec3 directionalLighting =
+    return
         ambientStrength * ubo_dirLight.color.rgb +
         directionalDiffuse * ubo_dirLight.color.rgb +
         specularStrength * directionalSpecular * ubo_dirLight.color.rgb;
 
-    // -------------------------------
-    // Point light (view space)
-    // -------------------------------
+}
+
+vec3 computePointLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 viewDirection) {
     vec3 pointLightVector = ubo_pointLight.position.xyz - positionViewSpace;
     float pointLightDistance = length(pointLightVector);
     vec3 pointLightDirection = normalize(pointLightVector);
@@ -73,23 +61,34 @@ void main()
             ubo_pointLight.attenuation.z * pointLightDistance * pointLightDistance
         );
 
-    vec3 pointLighting =
+    return
         pointAttenuation * (
             ambientStrength * ubo_pointLight.color.rgb +
             pointDiffuse * ubo_pointLight.color.rgb +
             specularStrength * pointSpecular * ubo_pointLight.color.rgb
         );
+}
 
-    // -------------------------------
+void main()
+{
+    // To view space transformations
+    vec3 positionViewSpace = (ubo.matrix_view * ubo.matrix_model * vec4(inPosition, 1.0)).xyz;
+    vec3 normalViewSpace   = normalize(mat3(ubo.matrix_normals) * inNormal);
+
+    // Camera is at (0,0,0) in view space
+    vec3 viewDirection = normalize(-positionViewSpace);
+
+    // Directional light (view space)
+    vec3 directionalLighting = computeDirectionalLighting(positionViewSpace, normalViewSpace, viewDirection);
+
+    // Point light (view space)
+    vec3 pointLighting = computePointLighting(positionViewSpace, normalViewSpace, viewDirection);
+
     // Final color (material * lighting)
-    // -------------------------------
     vec3 lighting = directionalLighting + pointLighting;
     vec3 finalColor = inColor * lighting;
 
     fragColor = vec4(finalColor, 1.0);
 
-    // -------------------------------
-    // Final position
-    // -------------------------------
     gl_Position = ubo.matrix_projection * vec4(positionViewSpace, 1.0);
 }
