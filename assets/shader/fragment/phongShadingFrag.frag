@@ -2,7 +2,7 @@
 
 layout(std140, binding = 0) uniform UBO {
     ivec4 drawModes;
-    vec4 color;
+    vec4 material;
 
     mat4 matrix_model;
     mat4 matrix_view;
@@ -23,20 +23,17 @@ layout(std140, binding = 2) uniform UBO_PointLight {
     vec4 attenuation; // [c, l, q, <unused>]
 } ubo_pointLight;
 
-const float shininess = 32.0;
-const float ambientStrength = 0.1;
-const float specularStrength = 0.5;
 vec3 computeDirectionalLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 viewDirection) {
     vec3 directionalLightDirection = normalize(-ubo_dirLight.direction.xyz);
     float directionalDiffuse = max(dot(normalViewSpace, directionalLightDirection), 0.0);
 
     vec3 directionalReflection = reflect(-directionalLightDirection, normalViewSpace);
-    float directionalSpecular = pow(max(dot(viewDirection, directionalReflection), 0.0), shininess);
+    float directionalSpecular = pow(max(dot(viewDirection, directionalReflection), 0.0), ubo.material.w);
 
     return
-        ambientStrength * ubo_dirLight.color.rgb +
-        directionalDiffuse * ubo_dirLight.color.rgb +
-        specularStrength * directionalSpecular * ubo_dirLight.color.rgb;
+        ubo.material.x * ubo_dirLight.color.rgb +
+        ubo.material.y * directionalDiffuse * ubo_dirLight.color.rgb +
+        ubo.material.z * directionalSpecular * ubo_dirLight.color.rgb;
 
 }
 
@@ -47,7 +44,7 @@ vec3 computePointLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 vie
 
     float pointDiffuse = max(dot(normalViewSpace, pointLightDirection), 0.0);
     vec3 pointReflection = reflect(-pointLightDirection, normalViewSpace);
-    float pointSpecular = pow(max(dot(viewDirection, pointReflection), 0.0), shininess);
+    float pointSpecular = pow(max(dot(viewDirection, pointReflection), 0.0), ubo.material.w);
 
     float pointAttenuation =
         1.0 / (
@@ -58,9 +55,9 @@ vec3 computePointLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 vie
 
     return
         pointAttenuation * (
-            ambientStrength * ubo_pointLight.color.rgb +
-            pointDiffuse * ubo_pointLight.color.rgb +
-            specularStrength * pointSpecular * ubo_pointLight.color.rgb
+            ubo.material.x * ubo_pointLight.color.rgb +
+            ubo.material.y * pointDiffuse * ubo_pointLight.color.rgb +
+            ubo.material.z * pointSpecular * ubo_pointLight.color.rgb
         );
 }
 
