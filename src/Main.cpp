@@ -314,21 +314,21 @@ void populate_pipeline_configs(
                 0,                                                              // .binding 
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
                 1,                                                              // .descriptorCount 
-                VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,  // only vertex shader visible      // .stageFlags 
                 nullptr                                                         // .pImmutableSamplers 
         };
         config.descriptorLayout[1] = {
                 1,                                                              // .binding 
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
                 1,                                                              // .descriptorCount 
-                VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,  // only vertex shader visible      // .stageFlags 
                 nullptr                                                         // .pImmutableSamplers 
         };
         config.descriptorLayout[2] = {
                 2,                                                              // .binding 
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
                 1,                                                              // .descriptorCount 
-                VK_SHADER_STAGE_VERTEX_BIT,  // only vertex shader visible      // .stageFlags 
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,  // only vertex shader visible      // .stageFlags 
                 nullptr                                                         // .pImmutableSamplers 
         };
 }
@@ -1273,21 +1273,21 @@ public:
                 bindings[0].binding = 0;
                 bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 bindings[0].descriptorCount = 1;
-                bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+                bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
                 bindings[0].pImmutableSamplers = nullptr;
 
                 // Directional light UBO
                 bindings[1].binding = 1;
                 bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 bindings[1].descriptorCount = 1;
-                bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+                bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
                 bindings[1].pImmutableSamplers = nullptr;
 
                 // Point light UBO
                 bindings[2].binding = 2;
                 bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 bindings[2].descriptorCount = 1;
-                bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+                bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
                 bindings[2].pImmutableSamplers = nullptr;
 
                 layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1931,25 +1931,31 @@ int main(int argc, char** argv) {
         // move camera logic
         double deltax = {}; double deltay = {}; get_mouse_delta(window, deltax, deltay);
         glm::mat4 mainCamera_view = main_camera.getView(deltax, deltay);
+        glm::mat4 mainCamera_virewInverse = glm::inverse(mainCamera_view);
         
         // update ubo
         ubo_cornellBox.matrix_view = mainCamera_view;
+        ubo_cornellBox.view_inverse = mainCamera_virewInverse;
         ubo_cornellBox.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cornell_uniform_buffer, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
         ubo_cube.matrix_view = mainCamera_view;
+        ubo_cube.view_inverse = mainCamera_virewInverse;
         ubo_cube.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cube_uniform_buffer, &ubo_cube, sizeof(ubo_cube));
 
         ubo_cylinder.matrix_view = mainCamera_view;
+        ubo_cylinder.view_inverse = mainCamera_virewInverse;
         ubo_cylinder.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cylinder_uniform_buffer, &ubo_cylinder, sizeof(ubo_cylinder));
 
         ubo_bezier_cyl.matrix_view = mainCamera_view;
+        ubo_bezier_cyl.view_inverse = mainCamera_virewInverse;
         ubo_bezier_cyl.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(bezier_cylinder_uniform_buffer, &ubo_bezier_cyl, sizeof(ubo_bezier_cyl));
 
         ubo_sphere.matrix_view = mainCamera_view;
+        ubo_sphere.view_inverse = mainCamera_virewInverse;
         ubo_sphere.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(sphere_uniform_buffer, &ubo_sphere, sizeof(ubo_sphere));
 

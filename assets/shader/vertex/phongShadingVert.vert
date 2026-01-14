@@ -28,33 +28,23 @@ layout(location = 2) in vec3 inNormal;
 
 layout(location = 0) out vec3 fragPositionVS;
 layout(location = 1) out vec3 fragNormalVS;
-layout(location = 2) out vec3 fragColorVS;
-layout(location = 3) out vec3 fragDirLightColor;
-layout(location = 4) out vec3 fragDirLightDir;
-layout(location = 5) out vec3 fragPointLightColor;
-layout(location = 6) out vec3 fragPointLightPos;
-layout(location = 7) out vec3 fragPointLightAttenuation;
-layout(location = 8) out mat4 viewInverse;
+layout(location = 2) out vec3 fragColor;
+layout(location = 3) out vec3 normalColor;
 
 void main()
 {
     // Transform vertex to view space
-    vec3 positionVS = (ubo.matrix_view * ubo.matrix_model * vec4(inPosition, 1.0)).xyz;
-    vec3 normalVS   = normalize(mat3(ubo.matrix_normals) * inNormal);
+    fragPositionVS = (ubo.matrix_view * ubo.matrix_model * vec4(inPosition, 1.0)).xyz;
+    fragNormalVS   = normalize(mat3(ubo.matrix_normals) * inNormal);
+    fragColor = inColor;
 
-    // Pass everything needed to fragment shader
-    fragPositionVS = positionVS;
-    fragNormalVS   = normalVS;
-    fragColorVS    = inColor;
+    // Get normalisez and scaled normal to display it as a color
+    vec3 scaledNormal = 0.5 * fragNormalVS + 0.5;
+    normalColor = vec3(
+            pow(scaledNormal.x, 2.2),
+            pow(scaledNormal.y, 2.2),
+            pow(scaledNormal.z, 2.2)
+    );
 
-    fragDirLightColor = ubo_dirLight.color.rgb;
-    fragDirLightDir   = normalize(-ubo_dirLight.direction.xyz);
-
-    fragPointLightColor       = ubo_pointLight.color.rgb;
-    fragPointLightPos         = ubo_pointLight.position.xyz;
-    fragPointLightAttenuation = ubo_pointLight.attenuation.xyz;
-
-    viewInverse = ubo.view_inverse;
-
-    gl_Position = ubo.matrix_projection * vec4(positionVS, 1.0);
+    gl_Position = ubo.matrix_projection * ubo.matrix_view * ubo.matrix_model * vec4(inPosition, 1.0);
 }

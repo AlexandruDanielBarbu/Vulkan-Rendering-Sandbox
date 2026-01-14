@@ -1,20 +1,68 @@
 #version 450
 
-layout(location = 0) in vec3 fragPositionVS;
-layout(location = 1) in vec3 fragNormalVS;
-layout(location = 2) in vec3 fragColorVS;
-layout(location = 3) in vec3 fragDirLightColor;
-layout(location = 4) in vec3 fragDirLightDir;
-layout(location = 5) in vec3 fragPointLightColor;
-layout(location = 6) in vec3 fragPointLightPos;
-layout(location = 7) in vec3 fragPointLightAttenuation;
-layout(location = 8) in mat4 viewInverse;
+layout(std140, binding = 0) uniform UBO {
+    ivec4 drawModes;
+    vec4 color;
 
-layout(location = 0) out vec4 fragColor;
+    mat4 matrix_model;
+    mat4 matrix_view;
+    mat4 matrix_projection;
+
+    mat4 matrix_normals;
+    mat4 view_inverse;
+} ubo;
+
+layout(std140, binding = 1) uniform UBO_DirLight {
+    vec4 color;
+    vec4 direction;
+} ubo_dirLight;
+
+layout(std140, binding = 2) uniform UBO_PointLight {
+    vec4 color;
+    vec4 position;
+    vec4 attenuation; // [c, l, q, <unused>]
+} ubo_pointLight;
 
 const float shininess = 32.0;
 const float ambientStrength = 0.1;
 const float specularStrength = 0.5;
+vec3 computeDirectionalLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 viewDirection) {
+    vec3 directionalLightDirection = normalize(-ubo_dirLight.direction.xyz);
+    float directionalDiffuse = max(dot(normalViewSpace, directionalLightDirection), 0.0);
+
+    vec3 directionalReflection = reflect(-directionalLightDirection, normalViewSpace);
+    float directionalSpecular = pow(max(dot(viewDirection, directionalReflection), 0.0), shininess);
+
+    return
+        ambientStrength * ubo_dirLight.color.rgb +
+        directionalDiffuse * ubo_dirLight.color.rgb +
+        specularStrength * directionalSpecular * ubo_dirLight.color.rgb;
+
+}
+
+vec3 computePointLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 viewDirection) {
+    vec3 pointLightVector = ubo_pointLight.position.xyz - positionViewSpace;
+    float pointLightDistance = length(pointLightVector);
+    vec3 pointLightDirection = normalize(pointLightVector);
+
+    float pointDiffuse = max(dot(normalViewSpace, pointLightDirection), 0.0);
+    vec3 pointReflection = reflect(-pointLightDirection, normalViewSpace);
+    float pointSpecular = pow(max(dot(viewDirection, pointReflection), 0.0), shininess);
+
+    float pointAttenuation =
+        1.0 / (
+            ubo_pointLight.attenuation.x +
+            ubo_pointLight.attenuation.y * pointLightDistance +
+            ubo_pointLight.attenuation.z * pointLightDistance * pointLightDistance
+        );
+
+    return
+        pointAttenuation * (
+            ambientStrength * ubo_pointLight.color.rgb +
+            pointDiffuse * ubo_pointLight.color.rgb +
+            specularStrength * pointSpecular * ubo_pointLight.color.rgb
+        );
+}
 
 // Brief - GCG utility function
 //
@@ -31,8 +79,8 @@ const float specularStrength = 0.5;
 // NOTE: view-space position!
 //
 vec3 getCornellBoxReflectionColor(vec3 positionWS, vec3 directionWS) {
-    vec3 P0 = (viewInverse * vec4(positionWS, 1.0)).xyz;
-    vec3 V  = normalize((viewInverse * vec4(directionWS, 0.0)).xyz);
+    vec3 P0 = (ubo.view_inverse * vec4(positionWS, 1.0)).xyz;
+    vec3 V  = normalize((ubo.view_inverse * vec4(directionWS, 0.0)).xyz);
 
     const float boxSize = 1.5;
     vec4[5] planes = {
@@ -82,56 +130,54 @@ float fresnelFactor(float cosTheta) {
     return F0 + (1 - F0) * pow((1 - cosTheta), 5);
 }
 
+layout(location = 0) in vec3 fragPositionVS;
+layout(location = 1) in vec3 fragNormalVS;
+layout(location = 2) in vec3 fragColor;
+layout(location = 3) in vec3 normalColor;
+
+layout(location = 0) out vec4 fragColorOut;
+
 void main()
 {
-    vec3 normal = normalize(fragNormalVS);
-    vec3 viewDir = normalize(-fragPositionVS); // camera at origin
+    // To view space transformations
+    vec3 positionViewSpace = fragPositionVS;
+    vec3 normalViewSpace   = normalize(fragNormalVS);
 
-    // -------- Directional light --------
-    float diffDir = max(dot(normal, fragDirLightDir), 0.0);
-    vec3 reflectDir = reflect(-fragDirLightDir, normal);
-    float specDir = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+    // Camera is at (0,0,0) in view space
+    vec3 viewDirection = normalize(-positionViewSpace);
 
-    vec3 directionalLighting = ambientStrength * fragDirLightColor +
-                               diffDir * fragDirLightColor +
-                               specularStrength * specDir * fragDirLightColor;
+    // Directional light (view space)
+    vec3 directionalLighting = computeDirectionalLighting(positionViewSpace, normalViewSpace, viewDirection);
 
-    // -------- Point light --------
-    vec3 pointVec = fragPointLightPos - fragPositionVS;
-    float distance = length(pointVec);
-    vec3 pointDir = normalize(pointVec);
+    // Point light (view space)
+    vec3 pointLighting = computePointLighting(positionViewSpace, normalViewSpace, viewDirection);
 
-    float diffPoint = max(dot(normal, pointDir), 0.0);
-    vec3 reflectPoint = reflect(-pointDir, normal);
-    float specPoint = pow(max(dot(viewDir, reflectPoint), 0.0), shininess);
-
-    float attenuation = 1.0 / (
-        fragPointLightAttenuation.x +
-        fragPointLightAttenuation.y * distance +
-        fragPointLightAttenuation.z * distance * distance
-    );
-
-    vec3 pointLighting = attenuation * (ambientStrength * fragPointLightColor +
-                                        diffPoint * fragPointLightColor +
-                                        specularStrength * specPoint * fragPointLightColor);
-
-    // -------- Final color --------
+    // Final color (material * lighting)
     vec3 lighting = directionalLighting + pointLighting;
-    vec3 finalColor = fragColorVS * lighting;
+    vec3 finalColor = fragColor * lighting;
+    
+    fragColorOut = vec4(finalColor, 1.0);
 
+    if (ubo.drawModes.y == 1) {
         // Get Fresnel value
-        float cosTheta = clamp(dot(normal, viewDir), 0.0, 1.0);
+        float cosTheta = clamp(dot(normalViewSpace, viewDirection), 0.0, 1.0);
         float fresnel = fresnelFactor(cosTheta);
         
         // get reflection
-        vec3 reflection = clampedReflect(-viewDir, normal);
+        vec3 reflection = clampedReflect(-viewDirection, normalViewSpace);
+
         // get reflection on cornel box
         vec3 cornelReflection = getCornellBoxReflectionColor(fragPositionVS, reflection);
+        
         // mix values
         vec3 mixedColor = mix(finalColor, cornelReflection, fresnel);
+
         // final color
-        fragColor = vec4(mixedColor, 1.0);
+        fragColorOut = vec4(mixedColor, 1.0);
+    }
 
-
-    //fragColor = vec4(finalColor, 1.0);
+    // checks for the normal view or fresnel effect
+    if (ubo.drawModes.x == 1) {
+        fragColorOut = vec4(normalColor, 1.0);
+    }
 }
