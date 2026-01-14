@@ -1862,8 +1862,8 @@ int main(int argc, char** argv) {
                 glm::vec3(0.0f, -0.5f, 0.0f)
         };
         Bezier curve(controlPoints, 0.21f, 36, 20, { 0.75, 0.25, 0.01 });
-        Sphere sphere2  = Sphere(0.26f, 18, 36, { 0.12, 0.12, 0.12 });
-        Sphere sphere1 = Sphere(0.26f, 18, 36, { 0.12, 0.12, 0.12 });
+        Sphere sphere2  = Sphere(0.26f, 18, 36, { 0.0, 0.21, 0.16 });
+        Sphere sphere1 = Sphere(0.26f, 18, 36, { 0.0, 0.21, 0.16 });
         Torus torus = Torus(1.1f, 0.1f, 32, 8, { 0,0,0 }, { 0.38, 0.67, 0.84 });
 #pragma endregion
 
@@ -1983,8 +1983,8 @@ int main(int argc, char** argv) {
         
         alexd_drawObject(phongPipeline, descriptorSet_cyl, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
         alexd_drawObject(phongPipeline, descriptorSet_bez_cyl, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
-        alexd_drawObject(gouraudPipeline, descriptorSet_sphere1, sphere1.get_vk_vbuff(), sphere1.get_vk_ibuff(), static_cast<uint32_t>(sphere1.get_ibuff_size()));
-        alexd_drawObject(phongPipeline, descriptorSet_sphere2, sphere2.get_vk_vbuff(), sphere2.get_vk_ibuff(), static_cast<uint32_t>(sphere2.get_ibuff_size()));
+        alexd_drawObject(phongPipeline, descriptorSet_sphere1, sphere1.get_vk_vbuff(), sphere1.get_vk_ibuff(), static_cast<uint32_t>(sphere1.get_ibuff_size()));
+        alexd_drawObject(gouraudPipeline, descriptorSet_sphere2, sphere2.get_vk_vbuff(), sphere2.get_vk_ibuff(), static_cast<uint32_t>(sphere2.get_ibuff_size()));
         //alexd_drawObject(vk_pipeline, descriptorSet_torus, torus.get_vk_vbuff(), torus.get_vk_ibuff(), static_cast<uint32_t>(torus.get_ibuff_size()));
         
         vklEndRecordingCommands();
