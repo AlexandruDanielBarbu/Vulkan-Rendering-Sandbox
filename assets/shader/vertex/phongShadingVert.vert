@@ -2,7 +2,7 @@
 
 layout(std140, binding = 0) uniform UBO {
     ivec4 drawModes;
-    vec4 color;
+    vec4 material;
 
     mat4 matrix_model;
     mat4 matrix_view;

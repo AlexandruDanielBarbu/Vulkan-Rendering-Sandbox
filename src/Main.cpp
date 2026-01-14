@@ -1132,8 +1132,9 @@ struct PointLight_UniformBufferObject
 
 struct UniformBufferObject {
         glm::ivec4 drawModes;
-        
-        glm::vec4 color;
+
+        // [ka, kd, ks, alpha]
+        glm::vec4 material;
         
         glm::mat4 matrix_model;
         glm::mat4 matrix_view;
@@ -1150,7 +1151,7 @@ private:
 
 public:
         ObjectSettings() {
-                ubo.color = glm::vec4(1.0f);
+                ubo.material = glm::vec4(0.0f);
 
                 ubo.matrix_model = glm::mat4(1.0f);
                 ubo.matrix_view = glm::mat4(1.0f);
@@ -1167,9 +1168,9 @@ public:
                 return *this;
         }
 
-        // Color
-        ObjectSettings& set_color(const glm::vec4& color) {
-                ubo.color = color;
+        // Material
+        ObjectSettings& set_material(const glm::vec4& material) {
+                ubo.material = material;
                 return *this;
         }
 
@@ -1230,6 +1231,7 @@ public:
                 ubo.matrix_projection = glm::mat4(1.0f);
 
                 ubo.matrix_normals = glm::mat4(1.0f);
+                ubo.view_inverse = glm::mat4(1.0f);
 
                 return *this;
         }
@@ -1721,15 +1723,16 @@ int main(int argc, char** argv) {
 #pragma endregion
 
 #pragma region custom graphics pipeline config
-        //std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/gouraudShadingVert.vert");
-        //std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/gouraudShadingFrag.frag");
-
-        std::string cube_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/phongShadingVert.vert");
-        std::string cube_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/phongShadingFrag.frag");
+        std::string gouraudShading_VS_Shader_path = gcgLoadShaderFilePath("assets/shader/vertex/gouraudShadingVert.vert");
+        std::string gouraudShading_FS_Shader_path = gcgLoadShaderFilePath("assets/shader/fragment/gouraudShadingFrag.frag");
 
 
-        std::string cornellBox_vertexShader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
-        std::string cornellBox_fragmentShader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
+        std::string phongShading_VS_Shader_path = gcgLoadShaderFilePath("assets/shader/vertex/phongShadingVert.vert");
+        std::string phongShading_FS_Shader_path = gcgLoadShaderFilePath("assets/shader/fragment/phongShadingFrag.frag");
+
+
+        std::string cornellBox_VS_Shader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
+        std::string cornellBox_FS_Shader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
 #pragma endregion
 
 
@@ -1740,7 +1743,7 @@ int main(int argc, char** argv) {
         // CornellBox settings
         UniformBufferObject ubo_cornellBox = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode)
-                // no color
+                .set_material(glm::vec4(0.1f, 0.9f, 0.3f, 10))
                 // no model matrix, left to I4
                 .setViewMatrix(main_camera.getView())
                 .setProjectionMatrix(main_camera.getProjection())
@@ -1752,27 +1755,10 @@ int main(int argc, char** argv) {
         ubo_builder.reset();
 
 
-        // Cube settings
-        UniformBufferObject ubo_cube = ubo_builder
-                .uploadDrawModes(normalMode, fresnelMode)
-                // no color
-                .apply_rotation((float)glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f))
-                .apply_translation(0.6f * glm::vec3(-1, 0, 0))
-                .apply_translation(0.9f * glm::vec3(0, -1, 0))
-                .setViewMatrix(main_camera.getView())
-                .setProjectionMatrix(main_camera.getProjection())
-                .compute_normals_matrix()
-                .get_ubo();
-        VkBuffer cube_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_cube);
-
-
-        ubo_builder.reset();
-
-
         // Cylinder settings
         UniformBufferObject ubo_cylinder = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode)
-                // no color
+                .set_material(glm::vec4(0.1f, 0.9f, 0.3f, 5))
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.3f * glm::vec3(0, 1, 0))
                 .setViewMatrix(main_camera.getView())
@@ -1788,7 +1774,7 @@ int main(int argc, char** argv) {
         // Bezier Cylinder settings
         UniformBufferObject ubo_bezier_cyl = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode)
-                //no color
+                .set_material(glm::vec4(0.1f, 0.9f, 0.3f, 5))
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .setViewMatrix(main_camera.getView())
                 .setProjectionMatrix(main_camera.getProjection())
@@ -1800,22 +1786,38 @@ int main(int argc, char** argv) {
         ubo_builder.reset();
 
 
-        // Sphere settings
-        UniformBufferObject ubo_sphere = ubo_builder
+        // Sphere2 settings
+        UniformBufferObject ubo_sphere_2 = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode)
-                // no colors
+                .set_material(glm::vec4(0.05f, 0.8f, 0.5f, 10))
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
                 .setViewMatrix(main_camera.getView())
                 .setProjectionMatrix(main_camera.getProjection())
                 .compute_normals_matrix()
                 .get_ubo();
-        VkBuffer sphere_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_sphere);
+        VkBuffer sphere2_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_sphere_2);
 
         
         ubo_builder.reset();
         
+
+        // Sphere settings
+        UniformBufferObject ubo_shpere_1 = ubo_builder
+                .uploadDrawModes(normalMode, fresnelMode)
+                .set_material(glm::vec4(0.05f, 0.8f, 0.5f, 10))
+                .apply_translation(0.6f * glm::vec3(-1, 0, 0))
+                .apply_translation(0.9f * glm::vec3(0, -1, 0))
+                .setViewMatrix(main_camera.getView())
+                .setProjectionMatrix(main_camera.getProjection())
+                .compute_normals_matrix()
+                .get_ubo();
+        VkBuffer sphere1_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_shpere_1);
         
+        
+        ubo_builder.reset();
+
+
         // Torus
         UniformBufferObject ubo_torus = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode)
@@ -1848,7 +1850,6 @@ int main(int argc, char** argv) {
 
 #pragma region Objects of the scene
         CornellBox cornellBox = CornellBox(3, 3, 3);
-        Cube cube = Cube(0.34f, 0.34f, 0.34f, { 0.0, 0.21, 0.16 });
         Cylinder cylinder = Cylinder(0.21f, 1.6, 20, { 0.75, 0.25, 0.01 });
 
         std::vector<glm::vec3> controlPoints{
@@ -1859,7 +1860,8 @@ int main(int argc, char** argv) {
                 glm::vec3(0.0f, -0.5f, 0.0f)
         };
         Bezier curve(controlPoints, 0.21f, 36, 20, { 0.75, 0.25, 0.01 });
-        Sphere sphere = Sphere(0.26f, 18, 36, { 0.12, 0.12, 0.12 });
+        Sphere sphere2  = Sphere(0.26f, 18, 36, { 0.12, 0.12, 0.12 });
+        Sphere sphere1 = Sphere(0.26f, 18, 36, { 0.12, 0.12, 0.12 });
         Torus torus = Torus(1.1f, 0.1f, 32, 8, { 0,0,0 }, { 0.38, 0.67, 0.84 });
 #pragma endregion
 
@@ -1868,10 +1870,10 @@ int main(int argc, char** argv) {
     ubo_manager.initialize(vk_device);
 
     VkDescriptorSet descriptorSet_cornell = ubo_manager.allocateDescriptorSets(vk_device);
-    VkDescriptorSet descriptorSet_cube = ubo_manager.allocateDescriptorSets(vk_device);
+    VkDescriptorSet descriptorSet_sphere1 = ubo_manager.allocateDescriptorSets(vk_device);
     VkDescriptorSet descriptorSet_cyl = ubo_manager.allocateDescriptorSets(vk_device);
     VkDescriptorSet descriptorSet_bez_cyl = ubo_manager.allocateDescriptorSets(vk_device);
-    VkDescriptorSet descriptorSet_sphere = ubo_manager.allocateDescriptorSets(vk_device);
+    VkDescriptorSet descriptorSet_sphere2 = ubo_manager.allocateDescriptorSets(vk_device);
     VkDescriptorSet descriptorSet_torus = ubo_manager.allocateDescriptorSets(vk_device);
 #pragma endregion
 
@@ -1884,8 +1886,8 @@ int main(int argc, char** argv) {
             pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
     // Cube
     ubo_manager.updateDescriptorSetAll(
-            vk_device, descriptorSet_cube,
-            cube_uniform_buffer, sizeof(UniformBufferObject),
+            vk_device, descriptorSet_sphere1,
+            sphere1_uniform_buffer, sizeof(UniformBufferObject),
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
             pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
     // Cylinder
@@ -1902,8 +1904,8 @@ int main(int argc, char** argv) {
             pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
     // Sphere
     ubo_manager.updateDescriptorSetAll(
-            vk_device, descriptorSet_sphere,
-            sphere_uniform_buffer, sizeof(UniformBufferObject),
+            vk_device, descriptorSet_sphere2,
+            sphere2_uniform_buffer, sizeof(UniformBufferObject),
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
             pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
     // Torus
@@ -1913,8 +1915,9 @@ int main(int argc, char** argv) {
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
             pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
 
-    auto cornellPipelines = pipeline_factory(cornellBox_vertexShader_path, cornellBox_fragmentShader_path);
-    auto objectsPipeline = pipeline_factory(cube_vertexShader_path, cube_fragmentShader_path);
+    auto cornellPipelines = pipeline_factory(cornellBox_VS_Shader_path, cornellBox_FS_Shader_path);
+    auto gouraudPipelines = pipeline_factory(gouraudShading_VS_Shader_path, gouraudShading_FS_Shader_path);
+    auto phongPipelines = pipeline_factory(phongShading_VS_Shader_path, phongShading_FS_Shader_path);
     
     vklEnablePipelineHotReloading(window, GLFW_KEY_F5);
 #pragma endregion
@@ -1933,16 +1936,16 @@ int main(int argc, char** argv) {
         glm::mat4 mainCamera_view = main_camera.getView(deltax, deltay);
         glm::mat4 mainCamera_virewInverse = glm::inverse(mainCamera_view);
         
-        // update ubo
+#pragma region update ubo
         ubo_cornellBox.matrix_view = mainCamera_view;
         ubo_cornellBox.view_inverse = mainCamera_virewInverse;
         ubo_cornellBox.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(cornell_uniform_buffer, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
-        ubo_cube.matrix_view = mainCamera_view;
-        ubo_cube.view_inverse = mainCamera_virewInverse;
-        ubo_cube.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
-        vklCopyDataIntoHostCoherentBuffer(cube_uniform_buffer, &ubo_cube, sizeof(ubo_cube));
+        ubo_shpere_1.matrix_view = mainCamera_view;
+        ubo_shpere_1.view_inverse = mainCamera_virewInverse;
+        ubo_shpere_1.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        vklCopyDataIntoHostCoherentBuffer(sphere1_uniform_buffer, &ubo_shpere_1, sizeof(ubo_shpere_1));
 
         ubo_cylinder.matrix_view = mainCamera_view;
         ubo_cylinder.view_inverse = mainCamera_virewInverse;
@@ -1954,24 +1957,27 @@ int main(int argc, char** argv) {
         ubo_bezier_cyl.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
         vklCopyDataIntoHostCoherentBuffer(bezier_cylinder_uniform_buffer, &ubo_bezier_cyl, sizeof(ubo_bezier_cyl));
 
-        ubo_sphere.matrix_view = mainCamera_view;
-        ubo_sphere.view_inverse = mainCamera_virewInverse;
-        ubo_sphere.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
-        vklCopyDataIntoHostCoherentBuffer(sphere_uniform_buffer, &ubo_sphere, sizeof(ubo_sphere));
+        ubo_sphere_2.matrix_view = mainCamera_view;
+        ubo_sphere_2.view_inverse = mainCamera_virewInverse;
+        ubo_sphere_2.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        vklCopyDataIntoHostCoherentBuffer(sphere2_uniform_buffer, &ubo_sphere_2, sizeof(ubo_sphere_2));
 
         ubo_torus.matrix_view = mainCamera_view;
         vklCopyDataIntoHostCoherentBuffer(torus_uniform_buffer, &ubo_torus, sizeof(ubo_torus));
+#pragma endregion
 
         vklStartRecordingCommands();
         
         VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
+        VkPipeline gouraudPipeline = choose_pipeline(gouraudPipelines);
+        VkPipeline phongPipeline = choose_pipeline(phongPipelines);
+        
         alexd_drawObject(cornellPipeline, descriptorSet_cornell, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
         
-        VkPipeline vk_pipeline = choose_pipeline(objectsPipeline);
-        alexd_drawObject(vk_pipeline, descriptorSet_cube, cube.get_vk_vbuff(), cube.get_vk_ibuff(), static_cast<uint32_t>(cube.get_ibuff_size()));
-        alexd_drawObject(vk_pipeline, descriptorSet_cyl, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
-        alexd_drawObject(vk_pipeline, descriptorSet_bez_cyl, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
-        alexd_drawObject(vk_pipeline, descriptorSet_sphere, sphere.get_vk_vbuff(), sphere.get_vk_ibuff(), static_cast<uint32_t>(sphere.get_ibuff_size()));
+        alexd_drawObject(phongPipeline, descriptorSet_cyl, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
+        alexd_drawObject(phongPipeline, descriptorSet_bez_cyl, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
+        alexd_drawObject(gouraudPipeline, descriptorSet_sphere1, sphere1.get_vk_vbuff(), sphere1.get_vk_ibuff(), static_cast<uint32_t>(sphere1.get_ibuff_size()));
+        alexd_drawObject(phongPipeline, descriptorSet_sphere2, sphere2.get_vk_vbuff(), sphere2.get_vk_ibuff(), static_cast<uint32_t>(sphere2.get_ibuff_size()));
         //alexd_drawObject(vk_pipeline, descriptorSet_torus, torus.get_vk_vbuff(), torus.get_vk_ibuff(), static_cast<uint32_t>(torus.get_ibuff_size()));
         
         vklEndRecordingCommands();
@@ -2000,22 +2006,23 @@ int main(int argc, char** argv) {
     vkDeviceWaitIdle(vk_device);
 
     destroy_pipelines(cornellPipelines);
-    destroy_pipelines(objectsPipeline);
+    destroy_pipelines(gouraudPipelines);
+    destroy_pipelines(phongPipelines);
 
     ubo_manager.cleanup(vk_device);
 
-    cube.destroyVkBuffers();
+    sphere1.destroyVkBuffers();
     cornellBox.destroyVkBuffers();
     cylinder.destroyVkBuffers();
-    sphere.destroyVkBuffers();
+    sphere2.destroyVkBuffers();
     curve.destroyVkBuffers();
     torus.destroyVkBuffers();
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(cornell_uniform_buffer);
-    vklDestroyHostCoherentBufferAndItsBackingMemory(cube_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(sphere1_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(cylinder_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(bezier_cylinder_uniform_buffer);
-    vklDestroyHostCoherentBufferAndItsBackingMemory(sphere_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(sphere2_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(torus_uniform_buffer);
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(dirLight_vk_buffer);
