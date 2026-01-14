@@ -800,7 +800,7 @@ public:
                 float longitude_step = (2 * PI) / longitude_subdivisions;
 
                 // bottom vert
-                vbuff.push_back({ origin + glm::vec3(0, radius, 0), color, glm::vec3(0, -1, 0)});
+                vbuff.push_back({ origin + glm::vec3(0, radius, 0), color, glm::vec3(0, 1, 0)});
 
                 // ring verts
                 for (int i = 1; i < latitude_subdivisions; i++) {
@@ -822,7 +822,7 @@ public:
                 }
 
                 // top vert
-                vbuff.push_back({ origin + glm::vec3(0, -radius, 0), color, glm::vec3(0, 1, 0) });
+                vbuff.push_back({ origin + glm::vec3(0, -radius, 0), color, glm::vec3(0, -1, 0) });
 
 
                 // bottom cap
@@ -1214,9 +1214,17 @@ public:
         // Normals Matrix
         ObjectSettings& compute_normals_matrix() {
                 // NOTE: I use ViewSpace for lighting!!
-                ubo.matrix_normals = glm::transpose(glm::inverse(ubo.matrix_view * ubo.matrix_model));
+                glm::mat4 modelView = ubo.matrix_view * ubo.matrix_model;
+                glm::mat3 normalMat = glm::transpose(glm::inverse(glm::mat3(modelView)));
+                ubo.matrix_normals = glm::mat4(normalMat);
 
                 return *this;
+        }
+
+        static void update_normal_matrix(UniformBufferObject& ubo) {
+                glm::mat4 modelView = ubo.matrix_view * ubo.matrix_model;
+                glm::mat3 normalMat = glm::transpose(glm::inverse(glm::mat3(modelView)));
+                ubo.matrix_normals = glm::mat4(normalMat);
         }
 
         UniformBufferObject get_ubo() {
@@ -1934,26 +1942,31 @@ int main(int argc, char** argv) {
         ubo_cornellBox.matrix_view = mainCamera_view;
         ubo_cornellBox.view_inverse = mainCamera_virewInverse;
         ubo_cornellBox.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ObjectSettings::update_normal_matrix(ubo_cornellBox);
         vklCopyDataIntoHostCoherentBuffer(cornell_uniform_buffer, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
         ubo_shpere_1.matrix_view = mainCamera_view;
         ubo_shpere_1.view_inverse = mainCamera_virewInverse;
         ubo_shpere_1.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ObjectSettings::update_normal_matrix(ubo_shpere_1);
         vklCopyDataIntoHostCoherentBuffer(sphere1_uniform_buffer, &ubo_shpere_1, sizeof(ubo_shpere_1));
 
         ubo_cylinder.matrix_view = mainCamera_view;
         ubo_cylinder.view_inverse = mainCamera_virewInverse;
         ubo_cylinder.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ObjectSettings::update_normal_matrix(ubo_cylinder);
         vklCopyDataIntoHostCoherentBuffer(cylinder_uniform_buffer, &ubo_cylinder, sizeof(ubo_cylinder));
 
         ubo_bezier_cyl.matrix_view = mainCamera_view;
         ubo_bezier_cyl.view_inverse = mainCamera_virewInverse;
         ubo_bezier_cyl.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ObjectSettings::update_normal_matrix(ubo_bezier_cyl);
         vklCopyDataIntoHostCoherentBuffer(bezier_cylinder_uniform_buffer, &ubo_bezier_cyl, sizeof(ubo_bezier_cyl));
 
         ubo_sphere_2.matrix_view = mainCamera_view;
         ubo_sphere_2.view_inverse = mainCamera_virewInverse;
         ubo_sphere_2.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ObjectSettings::update_normal_matrix(ubo_sphere_2);
         vklCopyDataIntoHostCoherentBuffer(sphere2_uniform_buffer, &ubo_sphere_2, sizeof(ubo_sphere_2));
 
         ubo_torus.matrix_view = mainCamera_view;

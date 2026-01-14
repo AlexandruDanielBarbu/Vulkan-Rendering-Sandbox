@@ -106,6 +106,8 @@ void main() {
             pow(scaledNormal.z, 2.2),
             1
         );
+
+        //fragColor = vec4(normalColor, 1);
     }
 
     gl_Position = ubo.matrix_projection * ubo.matrix_view * ubo.matrix_model * vec4(inPosition, 1.0);
