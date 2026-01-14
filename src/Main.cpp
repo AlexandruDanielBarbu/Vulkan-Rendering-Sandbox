@@ -1385,9 +1385,7 @@ int main(int argc, char** argv) {
         std::string window_title = window_reader.Get("window", "title", "Awesome Vulkan Project");
 #pragma endregion
 #pragma region load camera settings
-        // GCG framework stuff
         std::string init_camera_filepath = "assets/settings/camera_front.ini";
-        //std::string init_camera_filepath = "assets/settings/camera_front_right.ini";
         if (cmdline_args.init_camera)
                 init_camera_filepath = cmdline_args.init_camera_filepath;
 
@@ -1398,18 +1396,14 @@ int main(int argc, char** argv) {
         if (cmdline_args.init_renderer) {
                 init_renderer_filepath = cmdline_args.init_renderer_filepath;
         }
-
         INIReader renderer_reader(init_renderer_filepath);
+
         wireframe_mode = renderer_reader.GetBoolean("renderer", "wireframe", false);
-        bool with_backface_culling = renderer_reader.GetBoolean("renderer",
-                "backface_culling", false);
+        bool with_backface_culling = renderer_reader.GetBoolean("renderer", "backface_culling", false);
         if (with_backface_culling) selectedCullMode = 2;
-#pragma endregion
-#pragma region load user preferred view mode
-        init_renderer_filepath = "assets/settings/renderer_standard.ini";
-        INIReader renderer_reader2(init_renderer_filepath);
-        normalMode = renderer_reader2.GetBoolean("renderer", "normals", false);
-        fresnelMode = renderer_reader2.GetBoolean("renderer", "fresnel", true);
+        
+        normalMode = renderer_reader.GetBoolean("renderer", "normals", false);
+        fresnelMode = renderer_reader.GetBoolean("renderer", "fresnel", true);
 #pragma endregion
 
 #pragma endregion
