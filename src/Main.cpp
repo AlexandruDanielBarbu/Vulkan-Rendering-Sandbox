@@ -99,6 +99,7 @@ size_t selectedCullMode = 0;
 
 bool normalMode = false;
 bool fresnelMode = false;
+bool uvMode = false;
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -124,6 +125,9 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
     if (key == GLFW_KEY_F && action == GLFW_PRESS)
             fresnelMode = !fresnelMode;
+
+    if (key == GLFW_KEY_T && action == GLFW_PRESS)
+            uvMode = !uvMode;
 }
 
 bool left_mouse_btn_pressed = false;
@@ -727,22 +731,24 @@ public:
                 });
 
                 // Top ring
+                float uvStep = 1.0f / subdivisions;
                 for (int i = 0; i < subdivisions; i++) {
                         float phi = i * step;
+                        float uvCoordinates = i * uvStep;
+
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
                         
-                        auto [u, v] = convertXZtoUV(x, z, radius);
+                        //auto [u, v] = convertXZtoUV(x, z, radius);
                         vbuff.push_back({
                                 origin + glm::vec3(x, height / 2, z),
                                 color,
                                 glm::vec3(0, 1, 0),
-                                glm::vec2(u,v)
+                                glm::vec2(uvCoordinates, 0)
                         });
                 }
 
                 // 2nd Top ring
-                float uvStep = 1.0f / subdivisions;
                 for (int i = 0; i < subdivisions; i++) {
                         float phi = i * step;
                         float uvCoordinates = i * uvStep;
@@ -1266,8 +1272,8 @@ public:
         }
 
         // DrawModes
-        ObjectSettings& uploadDrawModes(int normals, int fresnel) {
-                ubo.drawModes = glm::ivec4(normals, fresnel, 0, 0);
+        ObjectSettings& uploadDrawModes(int normals, int fresnel, int uv) {
+                ubo.drawModes = glm::ivec4(normals, fresnel, uv, 0);
                 
                 return *this;
         }
@@ -1516,6 +1522,7 @@ int main(int argc, char** argv) {
         
         normalMode = renderer_reader.GetBoolean("renderer", "normals", false);
         fresnelMode = renderer_reader.GetBoolean("renderer", "fresnel", true);
+        uvMode = renderer_reader.GetBoolean("renderer", "texcoords", false);
 #pragma endregion
 
 #pragma endregion
@@ -1848,7 +1855,7 @@ int main(int argc, char** argv) {
         
         // CornellBox settings
         UniformBufferObject ubo_cornellBox = ubo_builder
-                .uploadDrawModes(normalMode, fresnelMode)
+                .uploadDrawModes(normalMode, fresnelMode, uvMode)
                 .set_material(glm::vec4(0.1f, 0.9f, 0.3f, 10))
                 // no model matrix, left to I4
                 .setViewMatrix(main_camera.getView())
@@ -1863,7 +1870,7 @@ int main(int argc, char** argv) {
 
         // Cylinder settings
         UniformBufferObject ubo_cylinder = ubo_builder
-                .uploadDrawModes(normalMode, fresnelMode)
+                .uploadDrawModes(normalMode, fresnelMode, uvMode)
                 .set_material(glm::vec4(0.1f, 0.9f, 0.3f, 5))
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.3f * glm::vec3(0, 1, 0))
@@ -1879,7 +1886,7 @@ int main(int argc, char** argv) {
 
         // Bezier Cylinder settings
         UniformBufferObject ubo_bezier_cyl = ubo_builder
-                .uploadDrawModes(normalMode, fresnelMode)
+                .uploadDrawModes(normalMode, fresnelMode, uvMode)
                 .set_material(glm::vec4(0.1f, 0.9f, 0.3f, 5))
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .setViewMatrix(main_camera.getView())
@@ -1894,7 +1901,7 @@ int main(int argc, char** argv) {
 
         // Sphere2 settings
         UniformBufferObject ubo_sphere_2 = ubo_builder
-                .uploadDrawModes(normalMode, fresnelMode)
+                .uploadDrawModes(normalMode, fresnelMode, uvMode)
                 .set_material(glm::vec4(0.05f, 0.8f, 0.5f, 10))
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
@@ -1910,7 +1917,7 @@ int main(int argc, char** argv) {
 
         // Sphere settings
         UniformBufferObject ubo_shpere_1 = ubo_builder
-                .uploadDrawModes(normalMode, fresnelMode)
+                .uploadDrawModes(normalMode, fresnelMode, uvMode)
                 .set_material(glm::vec4(0.05f, 0.8f, 0.5f, 10))
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
@@ -1926,7 +1933,7 @@ int main(int argc, char** argv) {
 
         // Torus
         UniformBufferObject ubo_torus = ubo_builder
-                .uploadDrawModes(normalMode, fresnelMode)
+                .uploadDrawModes(normalMode, fresnelMode, uvMode)
                 // no color
                 .apply_rotation(glm::radians(45.0f), glm::vec3(1,0,0))
                 .apply_scale(glm::vec3(1, 1.5f, 1))
@@ -2045,31 +2052,31 @@ int main(int argc, char** argv) {
 #pragma region update ubo
         ubo_cornellBox.matrix_view = mainCamera_view;
         ubo_cornellBox.view_inverse = mainCamera_virewInverse;
-        ubo_cornellBox.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ubo_cornellBox.drawModes = glm::ivec4(normalMode, fresnelMode, uvMode, 0);
         ObjectSettings::update_normal_matrix(ubo_cornellBox);
         vklCopyDataIntoHostCoherentBuffer(cornell_uniform_buffer, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
         ubo_shpere_1.matrix_view = mainCamera_view;
         ubo_shpere_1.view_inverse = mainCamera_virewInverse;
-        ubo_shpere_1.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ubo_shpere_1.drawModes = glm::ivec4(normalMode, fresnelMode, uvMode, 0);
         ObjectSettings::update_normal_matrix(ubo_shpere_1);
         vklCopyDataIntoHostCoherentBuffer(sphere1_uniform_buffer, &ubo_shpere_1, sizeof(ubo_shpere_1));
 
         ubo_cylinder.matrix_view = mainCamera_view;
         ubo_cylinder.view_inverse = mainCamera_virewInverse;
-        ubo_cylinder.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ubo_cylinder.drawModes = glm::ivec4(normalMode, fresnelMode, uvMode, 0);
         ObjectSettings::update_normal_matrix(ubo_cylinder);
         vklCopyDataIntoHostCoherentBuffer(cylinder_uniform_buffer, &ubo_cylinder, sizeof(ubo_cylinder));
 
         ubo_bezier_cyl.matrix_view = mainCamera_view;
         ubo_bezier_cyl.view_inverse = mainCamera_virewInverse;
-        ubo_bezier_cyl.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ubo_bezier_cyl.drawModes = glm::ivec4(normalMode, fresnelMode, uvMode, 0);
         ObjectSettings::update_normal_matrix(ubo_bezier_cyl);
         vklCopyDataIntoHostCoherentBuffer(bezier_cylinder_uniform_buffer, &ubo_bezier_cyl, sizeof(ubo_bezier_cyl));
 
         ubo_sphere_2.matrix_view = mainCamera_view;
         ubo_sphere_2.view_inverse = mainCamera_virewInverse;
-        ubo_sphere_2.drawModes = glm::ivec4(normalMode, fresnelMode, 0, 0);
+        ubo_sphere_2.drawModes = glm::ivec4(normalMode, fresnelMode, uvMode, 0);
         ObjectSettings::update_normal_matrix(ubo_sphere_2);
         vklCopyDataIntoHostCoherentBuffer(sphere2_uniform_buffer, &ubo_sphere_2, sizeof(ubo_sphere_2));
 

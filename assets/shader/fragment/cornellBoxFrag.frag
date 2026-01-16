@@ -64,6 +64,7 @@ vec3 computePointLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 vie
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec3 fragPos;
 layout(location = 2) in vec3 fragNormal;
+layout(location = 3) in vec2 outUV;
 
 layout(location = 0) out vec4 outColor;
 
@@ -103,4 +104,8 @@ void main() {
 
         //outColor = vec4(scaledNormal, 1);
     }
+
+    //if (ubo.drawModes.z == 1) {
+    //    outColor = vec4(outUV, 0, 1.0);
+    //}
 }

@@ -131,6 +131,7 @@ layout(location = 0) in vec3 fragPositionVS;
 layout(location = 1) in vec3 fragNormalVS;
 layout(location = 2) in vec3 fragColor;
 layout(location = 3) in vec3 normalColor;
+layout(location = 4) in vec2 uvCoordinates;
 
 layout(location = 0) out vec4 fragColorOut;
 
@@ -176,5 +177,9 @@ void main()
     // checks for the normal view or fresnel effect
     if (ubo.drawModes.x == 1) {
         fragColorOut = vec4(normalColor, 1.0);
+    }
+
+    if (ubo.drawModes.z == 1) {
+        fragColorOut = vec4(uvCoordinates, 0, 1.0);
     }
 }
