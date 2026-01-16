@@ -84,6 +84,7 @@ struct Vertex {
         glm::vec3 pos;
         glm::vec3 color;
         glm::vec3 normal;
+        glm::vec2 uv;
 };
 
 bool reset_camera = false;
@@ -286,7 +287,7 @@ void populate_pipeline_configs(
         };
 
         // on location 0 in my vertex buffer
-        config.inputAttributeDescriptions.resize(3, {});
+        config.inputAttributeDescriptions.resize(4, {});
         config.inputAttributeDescriptions[0] = {
                 0,                                   // .location 
                 0,                                   // .binding 
@@ -308,27 +309,33 @@ void populate_pipeline_configs(
                 offsetof(Vertex, normal)             // .offset 
         };
 
+        config.inputAttributeDescriptions[3] = {
+                3,                                   // .location 
+                0,                                   // .binding 
+                VK_FORMAT_R32G32_SFLOAT,             // .format 
+                offsetof(Vertex, uv)                 // .offset 
+        };
         // ubo setup
         config.descriptorLayout.resize(3, {});
         config.descriptorLayout[0] = {
                 0,                                                              // .binding 
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
                 1,                                                              // .descriptorCount 
-                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,  // only vertex shader visible      // .stageFlags 
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,      // .stageFlags 
                 nullptr                                                         // .pImmutableSamplers 
         };
         config.descriptorLayout[1] = {
                 1,                                                              // .binding 
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
                 1,                                                              // .descriptorCount 
-                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,  // only vertex shader visible      // .stageFlags 
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,      // .stageFlags 
                 nullptr                                                         // .pImmutableSamplers 
         };
         config.descriptorLayout[2] = {
                 2,                                                              // .binding 
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
                 1,                                                              // .descriptorCount 
-                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,  // only vertex shader visible      // .stageFlags 
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,      // .stageFlags 
                 nullptr                                                         // .pImmutableSamplers 
         };
 }
@@ -564,40 +571,40 @@ public:
         Cube(const float width = 1, const float height = 1, const float depth = 1, const glm::vec3& color = { 0, 0, 0 }, const glm::vec3& origin = { 0, 0, 0 }) {
                 vbuff = {
                         // top face verts
-                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), color, glm::vec3(0, 1, 0)},  // A
-                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), color, glm::vec3(0, 1, 0)},  // B
-                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), color, glm::vec3(0, 1, 0)},  // C
-                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), color, glm::vec3(0, 1, 0)},  // D
+                        {origin + glm::vec3(-width / 2, height / 2, -depth / 2), color, glm::vec3(0, 1, 0), glm::vec2(0, 0)},  // A
+                        {origin + glm::vec3( width / 2, height / 2, -depth / 2), color, glm::vec3(0, 1, 0), glm::vec2(1, 0)},  // B
+                        {origin + glm::vec3( width / 2, height / 2,  depth / 2), color, glm::vec3(0, 1, 0), glm::vec2(1, 1)},  // C
+                        {origin + glm::vec3(-width / 2, height / 2,  depth / 2), color, glm::vec3(0, 1, 0), glm::vec2(0, 1)},  // D
 
                         // front face (one facing +z axis)
-                        {origin + glm::vec3(-width / 2, -height / 2, depth / 2), color, glm::vec3(0, 0, 1)},  // P
-                        {origin + glm::vec3( width / 2, -height / 2, depth / 2), color, glm::vec3(0, 0, 1)},  // Q
-                        {origin + glm::vec3( width / 2,  height / 2, depth / 2), color, glm::vec3(0, 0, 1)},  // D
-                        {origin + glm::vec3(-width / 2,  height / 2, depth / 2), color, glm::vec3(0, 0, 1)},  // C
+                        {origin + glm::vec3(-width / 2, -height / 2, depth / 2), color, glm::vec3(0, 0, 1), glm::vec2(0, 0)},  // P
+                        {origin + glm::vec3( width / 2, -height / 2, depth / 2), color, glm::vec3(0, 0, 1), glm::vec2(1, 0)},  // Q
+                        {origin + glm::vec3( width / 2,  height / 2, depth / 2), color, glm::vec3(0, 0, 1), glm::vec2(1, 1)},  // D
+                        {origin + glm::vec3(-width / 2,  height / 2, depth / 2), color, glm::vec3(0, 0, 1), glm::vec2(0, 1)},  // C
 
                         // left face
-                        {origin + glm::vec3(width / 2, -height / 2, -depth / 2), color, glm::vec3(1, 0, 0)},  // N
-                        {origin + glm::vec3(width / 2, -height / 2,  depth / 2), color, glm::vec3(1, 0, 0)},  // P
-                        {origin + glm::vec3(width / 2,  height / 2,  depth / 2), color, glm::vec3(1, 0, 0)},  // C
-                        {origin + glm::vec3(width / 2,  height / 2, -depth / 2), color, glm::vec3(1, 0, 0)},  // B
+                        {origin + glm::vec3(width / 2, -height / 2, -depth / 2), color, glm::vec3(1, 0, 0), glm::vec2(0, 0)},  // N
+                        {origin + glm::vec3(width / 2, -height / 2,  depth / 2), color, glm::vec3(1, 0, 0), glm::vec2(1, 0)},  // P
+                        {origin + glm::vec3(width / 2,  height / 2,  depth / 2), color, glm::vec3(1, 0, 0), glm::vec2(1, 1)},  // C
+                        {origin + glm::vec3(width / 2,  height / 2, -depth / 2), color, glm::vec3(1, 0, 0), glm::vec2(0, 1)},  // B
 
                         // back face (one facing away from +z axis)
-                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(0, 0, -1)},  // M
-                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), color, glm::vec3(0, 0, -1)},  // N
-                        {origin + glm::vec3( width / 2,  height / 2, -depth / 2), color, glm::vec3(0, 0, -1)},  // B
-                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), color, glm::vec3(0, 0, -1)},  // A
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(0, 0, -1), glm::vec2(0, 0)},  // M
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), color, glm::vec3(0, 0, -1), glm::vec2(1, 0)},  // N
+                        {origin + glm::vec3( width / 2,  height / 2, -depth / 2), color, glm::vec3(0, 0, -1), glm::vec2(1, 1)},  // B
+                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), color, glm::vec3(0, 0, -1), glm::vec2(0, 1)},  // A
 
                         // right face
-                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), color, glm::vec3(-1, 0, 0)},  // Q
-                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(-1, 0, 0)},  // M
-                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), color, glm::vec3(-1, 0, 0)},  // A
-                        {origin + glm::vec3(-width / 2,  height / 2,  depth / 2), color, glm::vec3(-1, 0, 0)},  // D
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), color, glm::vec3(-1, 0, 0), glm::vec2(0, 0)},  // Q
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(-1, 0, 0), glm::vec2(1, 0)},  // M
+                        {origin + glm::vec3(-width / 2,  height / 2, -depth / 2), color, glm::vec3(-1, 0, 0), glm::vec2(1, 1)},  // A
+                        {origin + glm::vec3(-width / 2,  height / 2,  depth / 2), color, glm::vec3(-1, 0, 0), glm::vec2(0, 1)},  // D
 
                         // bottom face verts
-                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(0, -1, 0)},  // M
-                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), color, glm::vec3(0, -1, 0)},  // N
-                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), color, glm::vec3(0, -1, 0)},  // P
-                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), color, glm::vec3(0, -1, 0)}   // Q
+                        {origin + glm::vec3(-width / 2, -height / 2, -depth / 2), color, glm::vec3(0, -1, 0), glm::vec2(0, 0)},  // M
+                        {origin + glm::vec3( width / 2, -height / 2, -depth / 2), color, glm::vec3(0, -1, 0), glm::vec2(1, 0)},  // N
+                        {origin + glm::vec3( width / 2, -height / 2,  depth / 2), color, glm::vec3(0, -1, 0), glm::vec2(1, 1)},  // P
+                        {origin + glm::vec3(-width / 2, -height / 2,  depth / 2), color, glm::vec3(0, -1, 0), glm::vec2(0, 1)}   // Q
                 };
 
                 ibuff = {
