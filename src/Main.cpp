@@ -563,7 +563,14 @@ protected:
                         get_ibuff(), get_ibuff_size() * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
                 );
         }
-        //glm::mat4 object_matrix = glm::mat4(1.0f);
+        
+        std::tuple<float, float> convertXZtoUV(float x, float z, float radius) {
+                
+                float uvx = x / (2.0 * radius) + 0.5;
+                float uvz = z / (2.0 * radius) + 0.5;
+
+                return { uvx, uvz };
+        }
 };
 
 class Cube : public Object {
@@ -712,7 +719,12 @@ public:
                 float step = (2 * PI) / subdivisions;
                 
                 // Top vert
-                vbuff.push_back({ origin + glm::vec3(0, height / 2, 0), color, glm::vec3(0, 1, 0)});
+                vbuff.push_back({
+                        origin + glm::vec3(0, height / 2, 0),
+                        color,
+                        glm::vec3(0, 1, 0),
+                        glm::vec2(0, 0)
+                });
 
                 // Top ring
                 for (int i = 0; i < subdivisions; i++) {
@@ -720,25 +732,46 @@ public:
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
                         
-                        vbuff.push_back({ origin + glm::vec3(x, height / 2, z), color, glm::vec3(0, 1, 0)});
+                        auto [u, v] = convertXZtoUV(x, z, radius);
+                        vbuff.push_back({
+                                origin + glm::vec3(x, height / 2, z),
+                                color,
+                                glm::vec3(0, 1, 0),
+                                glm::vec2(u,v)
+                        });
                 }
 
                 // 2nd Top ring
+                float uvStep = 1.0f / subdivisions;
                 for (int i = 0; i < subdivisions; i++) {
                         float phi = i * step;
+                        float uvCoordinates = i * uvStep;
+
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
 
-                        vbuff.push_back({ origin + glm::vec3(x, height / 2, z), color, glm::normalize(glm::vec3(x, height / 2, z) - glm::vec3(0, height / 2, 0)) });
+                        vbuff.push_back({
+                                origin + glm::vec3(x, height / 2, z),
+                                color,
+                                glm::normalize(glm::vec3(x, height / 2, z) - glm::vec3(0, height / 2, 0)),
+                                glm::vec2(uvCoordinates, 0)
+                        });
                 }
 
                 // 2nd Bottom ring
                 for (int i = 0; i < subdivisions; i++) {
                         float phi = i * step;
+                        float uvCoordinates = i * uvStep;
+
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
 
-                        vbuff.push_back({ origin + glm::vec3(x, -height / 2, z), color, glm::normalize(glm::vec3(x, -height / 2, z) - glm::vec3(0, -height / 2, 0)) });
+                        vbuff.push_back({
+                                origin + glm::vec3(x, -height / 2, z),
+                                color,
+                                glm::normalize(glm::vec3(x, -height / 2, z) - glm::vec3(0, -height / 2, 0)),
+                                glm::vec2(uvCoordinates, 1)
+                        });
                 }
 
                 // Bottom ring
@@ -746,12 +779,23 @@ public:
                         float phi = i * step;
                         float x = radius * cos(phi);
                         float z = radius * sin(phi);
+                        auto [u, v] = convertXZtoUV(x, z, radius);
 
-                        vbuff.push_back({ origin + glm::vec3(x, -height / 2, z), color, glm::vec3(0, -1, 0) });
+                        vbuff.push_back({
+                                origin + glm::vec3(x, -height / 2, z),
+                                color,
+                                glm::vec3(0, -1, 0),
+                                glm::vec2(u, v)
+                        });
                 }
 
                 // Bottom vert
-                vbuff.push_back({ origin + glm::vec3(0, -height / 2, 0), color, glm::vec3(0, -1, 0) });
+                vbuff.push_back({
+                        origin + glm::vec3(0, -height / 2, 0),
+                        color,
+                        glm::vec3(0, -1, 0),
+                        glm::vec2(0, 0)
+                });
 
 
                 // top face
