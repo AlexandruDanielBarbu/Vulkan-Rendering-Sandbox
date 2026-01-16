@@ -950,10 +950,16 @@ public:
                         forward = glm::vec3(0, 0, 1);
                         right = glm::normalize(glm::cross(up, forward));
 
-                        vbuff.push_back({ controlPoints[0], color, -up });
+                        vbuff.push_back({
+                                controlPoints[0],
+                                color,
+                                -up,
+                                glm::vec2(0, 0)
+                        });
 
 
                         float vertStep = (2 * PI) / subdivisions;
+                        float uvStepU = 1.0f / subdivisions;
                         for (int vertCount = 0; vertCount < subdivisions; vertCount++) {
                                 float phi = vertCount * vertStep;
 
@@ -962,23 +968,36 @@ public:
                                         0,
                                         radius * sin(phi)
                                 );
-
                                 glm::mat3 orientation(right, up, forward);
 
                                 point = orientation * point;
 
                                 point += controlPoints[0];
 
-                                vbuff.push_back({ point, color,  glm::normalize(point - controlPoints[0]) });
+                                auto [u, v] = convertXZtoUV(point.x, point.y, radius);
+
+                                vbuff.push_back({
+                                        point,
+                                        color,
+                                        glm::normalize(-up),
+                                        glm::vec2(u,v)
+                                });
                         }
                 }
 
                 
                 // generate rings
                 float step = 1.0f / segments;
+                float vertStep = (2 * PI) / subdivisions;
+
+                // quick hack to get the V coordinate in the right place
+                float uvStepV = 1.0f / segments;
+                float uvStepU = 1.0f / subdivisions;
+
                 for (int i = 0; i <= segments; i++) {
                         float t = i * step;
-
+                        float v = i * uvStepV;
+                        
                         // generate point on curve
                         glm::vec3 circle_origin = DeCasteljau(controlPoints, t);
                         glm::vec3 tangent = glm::normalize(derivateBezierCurve(controlPoints, t));
@@ -990,10 +1009,10 @@ public:
                         right = glm::normalize(glm::cross(up, forward));
                         
                         // generate circle in the new x'o'z' plane
-                        float vertStep = (2 * PI) / subdivisions;
                         for (int vertCount = 0; vertCount < subdivisions; vertCount++) {
                                 float phi = vertCount * vertStep;
-                                
+                                float u = vertCount * uvStepU;
+
                                 glm::vec3 point(
                                         radius * cos(phi),
                                         0,
@@ -1006,7 +1025,12 @@ public:
 
                                 point += circle_origin;
 
-                                vbuff.push_back({ point, color,  glm::normalize(point - circle_origin) });
+                                vbuff.push_back({
+                                        point,
+                                        color,
+                                        glm::normalize(point - circle_origin),
+                                        glm::vec2(u, v)
+                                });
                         }
                 }
 
@@ -1035,10 +1059,23 @@ public:
 
                                 point += controlPoints[controlPoints.size() - 1];
 
-                                vbuff.push_back({ point, color,  glm::normalize(point - controlPoints[controlPoints.size()-1])});
+                                auto [u, v] = convertXZtoUV(point.x, point.y, radius);
+
+                                vbuff.push_back({
+                                        point,
+                                        color, 
+                                        //glm::normalize(point - controlPoints[controlPoints.size()-1])
+                                        up,
+                                        glm::vec2(u, v)
+                                });
                         }
 
-                        vbuff.push_back({ controlPoints[controlPoints.size() - 1], color, up });
+                        vbuff.push_back({
+                                controlPoints[controlPoints.size() - 1],
+                                color,
+                                up,
+                                glm::vec2(1, 1)
+                        });
                 }
 
         
@@ -1050,7 +1087,6 @@ public:
                         ibuff.push_back(1 + iNext);
                 }
 
-                // TODO this changes just like the cylinder
                 // lateral faces
                 // nasty mesh bug if i let this loop run up to  `< latitude_subdivisions - 1`
                 for (int i = 1; i < segments + 1; i++) {
