@@ -794,7 +794,7 @@ public:
                         origin + glm::vec3(0, -height / 2, 0),
                         color,
                         glm::vec3(0, -1, 0),
-                        glm::vec2(0, 0)
+                        glm::vec2(1, 1)
                 });
 
 
@@ -850,30 +850,47 @@ public:
                 float latitude_step = PI / latitude_subdivisions;
                 float longitude_step = (2 * PI) / longitude_subdivisions;
 
-                // bottom vert
-                vbuff.push_back({ origin + glm::vec3(0, radius, 0), color, glm::vec3(0, 1, 0)});
+                // top vert
+                vbuff.push_back({
+                        origin + glm::vec3(0, radius, 0),
+                        color,
+                        glm::vec3(0, 1, 0),
+                        glm::vec2(0, 0)
+                });
 
                 // ring verts
+                float uvStepV = 1.0f / latitude_subdivisions;
+                float uvStepU = 1.0f / longitude_subdivisions;
                 for (int i = 1; i < latitude_subdivisions; i++) {
                         float theta = i * latitude_step;
+                        float v = i * uvStepV;
 
                         for (int j = 0; j < longitude_subdivisions; j++) {
                                 float phi = j * longitude_step;
+                                float u = j * uvStepU;
 
-                                vbuff.push_back({ origin + glm::vec3(
-                                        radius * sin(theta) * cos(phi),
-                                        radius * cos(theta),
-                                        radius * sin(theta) * sin(phi)),
+                                vbuff.push_back({
+                                        origin + glm::vec3(
+                                                radius * sin(theta) * cos(phi),
+                                                radius * cos(theta),
+                                                radius * sin(theta) * sin(phi)
+                                        ),
                                         color,
                                         glm::normalize(glm::vec3(
-                                        radius * sin(theta) * cos(phi),
-                                        radius * cos(theta),
-                                        radius * sin(theta) * sin(phi)) - origin)});
+                                                radius * sin(theta) * cos(phi),
+                                                radius * cos(theta),
+                                                radius * sin(theta) * sin(phi)) - origin
+                                        ),
+                                        glm::vec2(u, v)});
                         }
                 }
 
-                // top vert
-                vbuff.push_back({ origin + glm::vec3(0, -radius, 0), color, glm::vec3(0, -1, 0) });
+                // bottom vert
+                vbuff.push_back({
+                        origin + glm::vec3(0, -radius, 0),
+                        color,
+                        glm::vec3(0, -1, 0),
+                        glm::vec2(1, 1)});
 
 
                 // bottom cap
