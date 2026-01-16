@@ -25,11 +25,13 @@ layout(std140, binding = 2) uniform UBO_PointLight {
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
 layout(location = 2) in vec3 inNormal;
+layout(location = 3) in vec2 inUV;
 
 layout(location = 0) out vec3 fragPositionVS;
 layout(location = 1) out vec3 fragNormalVS;
 layout(location = 2) out vec3 fragColor;
 layout(location = 3) out vec3 normalColor;
+layout(location = 4) out vec2 uvCoordinates;
 
 void main()
 {
@@ -46,5 +48,6 @@ void main()
             pow(scaledNormal.z, 2.2)
     );
 
+    uvCoordinates = inUV;
     gl_Position = ubo.matrix_projection * ubo.matrix_view * ubo.matrix_model * vec4(inPosition, 1.0);
 }

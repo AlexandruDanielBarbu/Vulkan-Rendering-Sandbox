@@ -25,8 +25,10 @@ layout(std140, binding = 2) uniform UBO_PointLight {
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
 layout(location = 2) in vec3 inNormal;
+layout(location = 3) in vec2 inUV;
 
 layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec2 outUV;
 
 vec3 computeDirectionalLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 viewDirection) {
     vec3 directionalLightDirection = normalize(-ubo_dirLight.direction.xyz);
@@ -183,5 +185,6 @@ void main()
         );
     }
 
+    outUV = inUV;
     gl_Position = ubo.matrix_projection * vec4(positionViewSpace, 1.0);
 }
