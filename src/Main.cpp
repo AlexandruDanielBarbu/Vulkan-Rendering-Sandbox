@@ -1995,6 +1995,56 @@ int main(int argc, char** argv) {
                 VKL_EXIT_WITH_ERROR("Failed in vkWaitForFences.");
         }
 
+
+        std::vector<VkImageView> myVkImageViews;
+        for (size_t i = 0; i < texturesVkImages.size(); i++) {
+
+                VkImageViewCreateInfo imageViewCreateInfo = {};
+                imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                imageViewCreateInfo.image = texturesVkImages[i];
+                imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+                imageViewCreateInfo.format = texturesVklImageInfo[i].imageFormat;
+                imageViewCreateInfo.flags = 0;
+
+                imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+                imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+                imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+                imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+                imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+                imageViewCreateInfo.subresourceRange.levelCount = 1;
+                imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+                imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+                VkImageView imageView;
+                if (vkCreateImageView(vk_device, &imageViewCreateInfo, nullptr, &imageView) != VK_SUCCESS) {
+                        VKL_EXIT_WITH_ERROR("Failed in vkCreateImageView.");
+                }
+
+                myVkImageViews.push_back(imageView);
+        }
+
+        VkSamplerCreateInfo samplerCreateInfo = {};
+        samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        
+        samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+        samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+        
+        samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+        samplerCreateInfo.minLod = 0.0f;
+        samplerCreateInfo.minLod = VK_LOD_CLAMP_NONE;
+
+        samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        
+        VkSampler sampler;
+        if (vkCreateSampler(vk_device, &samplerCreateInfo, nullptr, &sampler) != VK_SUCCESS) {
+                VKL_EXIT_WITH_ERROR("Failed in vkCreateSampler.");
+        }
+
 #pragma region Object UBO
         ObjectSettings ubo_builder;
         
@@ -2288,6 +2338,8 @@ int main(int argc, char** argv) {
 
     for (const auto& thing : texturesVkBuffers) vklDestroyHostCoherentBufferAndItsBackingMemory(thing);
     for (const auto& thing : texturesVkImages) vklDestroyDeviceLocalImageAndItsBackingMemory(thing);
+    for (const auto& thing : myVkImageViews) vkDestroyImageView(vk_device, thing, nullptr);
+    vkDestroySampler(vk_device, sampler, nullptr);
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(cornell_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(sphere1_uniform_buffer);
