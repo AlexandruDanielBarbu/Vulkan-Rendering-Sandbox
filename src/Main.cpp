@@ -1846,9 +1846,154 @@ int main(int argc, char** argv) {
 
         std::string cornellBox_VS_Shader_path = gcgLoadShaderFilePath("assets/shader/vertex/cornellBoxVert.vert");
         std::string cornellBox_FS_Shader_path = gcgLoadShaderFilePath("assets/shader/fragment/cornellBoxFrag.frag");
+
+        auto woodDdsTexturePath = gcgLoadShaderFilePath("assets/textures/wood_texture.dds");
+        auto tiles_diffuseDdsTexturePath = gcgLoadShaderFilePath("assets/textures/tiles_diffuse.dds");
 #pragma endregion
 
+        std::vector<VkBuffer> texturesVkBuffers = {
+                vklLoadDdsImageIntoHostCoherentBuffer(woodDdsTexturePath.data()),
+                vklLoadDdsImageIntoHostCoherentBuffer(tiles_diffuseDdsTexturePath.data())
+        };
 
+        std::vector<VklImageInfo> texturesVklImageInfo = {
+                vklGetDdsImageInfo(woodDdsTexturePath.data()),
+                vklGetDdsImageInfo(tiles_diffuseDdsTexturePath.data())
+        };
+
+        std::vector<VkImage> texturesVkImages = {
+                vklCreateDeviceLocalImageWithBackingMemory(
+                        vk_physical_device, vk_device,
+
+                        texturesVklImageInfo[0].extent.width,
+                        texturesVklImageInfo[0].extent.height,
+                        texturesVklImageInfo[0].imageFormat,
+
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                ),
+
+                vklCreateDeviceLocalImageWithBackingMemory(
+                        vk_physical_device, vk_device,
+                        
+                        texturesVklImageInfo[1].extent.width,
+                        texturesVklImageInfo[1].extent.height,
+                        texturesVklImageInfo[1].imageFormat,
+
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                ),
+        };
+
+        // creating a VkCommandPool
+        VkCommandPoolCreateInfo poolCreateInfo = {};
+        poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        // flag here might be wrong
+        poolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        poolCreateInfo.queueFamilyIndex = selected_queue_family_index;
+        
+        VkCommandPool myTextureCommandPool;
+        if (vkCreateCommandPool(vk_device, &poolCreateInfo, nullptr, &myTextureCommandPool) != VK_SUCCESS) {
+                VKL_EXIT_WITH_ERROR("Error in vkCreateCommandPool.");
+        }
+
+        VkCommandBufferAllocateInfo cmdBufferAllocInfo = {};
+        cmdBufferAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        cmdBufferAllocInfo.commandPool = myTextureCommandPool;
+        cmdBufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        cmdBufferAllocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer myCommandBuffer;
+        if (vkAllocateCommandBuffers(vk_device, &cmdBufferAllocInfo, &myCommandBuffer) != VK_SUCCESS) {
+                VKL_EXIT_WITH_ERROR("Error in vkallocateCommandBuffers.");
+        }
+
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        if (vkBeginCommandBuffer(myCommandBuffer, &beginInfo) != VK_SUCCESS) {
+                VKL_EXIT_WITH_ERROR("Error in begin command buffer.");
+        }
+
+        for (size_t i = 0; i < texturesVkImages.size(); i++)
+        {
+                VkImageMemoryBarrier barrier = {};
+                barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = texturesVkImages[i];
+                barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barrier.subresourceRange.baseMipLevel = 0;
+                barrier.subresourceRange.levelCount = 1;
+                barrier.subresourceRange.baseArrayLayer = 0;
+                barrier.subresourceRange.layerCount = 1;
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+                vkCmdPipelineBarrier(
+                        myCommandBuffer,
+                        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        0, 0, nullptr, 0, nullptr, 1, &barrier
+                );
+
+                VkBufferImageCopy region = {};
+                region.bufferOffset = 0;
+                region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                region.imageSubresource.mipLevel = 0;
+                region.imageSubresource.baseArrayLayer = 0;
+                region.imageSubresource.layerCount = 1;
+                region.imageExtent.width = texturesVklImageInfo[i].extent.width;
+                region.imageExtent.height = texturesVklImageInfo[i].extent.height;
+                region.imageExtent.depth = 1;
+
+                vkCmdCopyBufferToImage(
+                        myCommandBuffer,
+                        texturesVkBuffers[i],
+                        texturesVkImages[i],
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        1, &region
+                );
+
+                barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+                vkCmdPipelineBarrier(
+                        myCommandBuffer,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        0, 0, nullptr, 0, nullptr, 1, &barrier
+                );
+        }
+
+
+        if (vkEndCommandBuffer(myCommandBuffer) != VK_SUCCESS) {
+                VKL_EXIT_WITH_ERROR("Error in vkEndCommandBuffer.");
+        }
+
+        VkFenceCreateInfo fenceInfo = {};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = 0;
+        fenceInfo.pNext = nullptr;
+
+        VkFence myVkFence;
+        if (vkCreateFence(vk_device, &fenceInfo, nullptr, &myVkFence) != VK_SUCCESS) {
+                VKL_EXIT_WITH_ERROR("Error in vkCreateFence.");
+        }
+
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &myCommandBuffer;
+
+        if (vkQueueSubmit(vk_queue, 1, &submitInfo, myVkFence) != VK_SUCCESS) {
+                VKL_EXIT_WITH_ERROR("Failed to submit transfer command buffer.");
+        }
+
+        if (vkWaitForFences(vk_device, 1, &myVkFence, VK_TRUE, UINT64_MAX) != VK_SUCCESS) {
+                VKL_EXIT_WITH_ERROR("Failed in vkWaitForFences.");
+        }
 
 #pragma region Object UBO
         ObjectSettings ubo_builder;
@@ -2136,12 +2281,21 @@ int main(int argc, char** argv) {
     curve.destroyVkBuffers();
     torus.destroyVkBuffers();
 
+    // Task 6 related cleanups for the textures
+    vkDestroyFence(vk_device, myVkFence, nullptr);
+    vkFreeCommandBuffers(vk_device, myTextureCommandPool, 1, &myCommandBuffer);
+    vkDestroyCommandPool(vk_device, myTextureCommandPool, nullptr);
+
+    for (const auto& thing : texturesVkBuffers) vklDestroyHostCoherentBufferAndItsBackingMemory(thing);
+    for (const auto& thing : texturesVkImages) vklDestroyDeviceLocalImageAndItsBackingMemory(thing);
+
     vklDestroyHostCoherentBufferAndItsBackingMemory(cornell_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(sphere1_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(cylinder_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(bezier_cylinder_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(sphere2_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(torus_uniform_buffer);
+
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(dirLight_vk_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(pointLight_vk_buffer);
