@@ -23,6 +23,8 @@ layout(std140, binding = 2) uniform UBO_PointLight {
     vec4 attenuation; // [c, l, q, <unused>]
 } ubo_pointLight;
 
+layout (binding = 3) uniform sampler2D objectTexture;
+
 vec3 computeDirectionalLighting(vec3 positionViewSpace, vec3 normalViewSpace, vec3 viewDirection) {
     vec3 directionalLightDirection = normalize(-ubo_dirLight.direction.xyz);
     float directionalDiffuse = max(dot(normalViewSpace, directionalLightDirection), 0.0);
@@ -129,7 +131,7 @@ float fresnelFactor(float cosTheta) {
 
 layout(location = 0) in vec3 fragPositionVS;
 layout(location = 1) in vec3 fragNormalVS;
-layout(location = 2) in vec3 fragColor;
+layout(location = 2) in vec3 fragColor___;
 layout(location = 3) in vec3 normalColor;
 layout(location = 4) in vec2 uvCoordinates;
 
@@ -137,6 +139,8 @@ layout(location = 0) out vec4 fragColorOut;
 
 void main()
 {
+    vec3 fragColor = texture(objectTexture, uvCoordinates).rgb;
+
     // To view space transformations
     vec3 positionViewSpace = fragPositionVS;
     vec3 normalViewSpace   = normalize(fragNormalVS);
