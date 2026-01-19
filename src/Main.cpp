@@ -319,8 +319,9 @@ void populate_pipeline_configs(
                 VK_FORMAT_R32G32_SFLOAT,             // .format 
                 offsetof(Vertex, uv)                 // .offset 
         };
+
         // ubo setup
-        config.descriptorLayout.resize(3, {});
+        config.descriptorLayout.resize(4, {});
         config.descriptorLayout[0] = {
                 0,                                                              // .binding 
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
@@ -340,6 +341,13 @@ void populate_pipeline_configs(
                 VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,                              // .descriptorType 
                 1,                                                              // .descriptorCount 
                 VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,      // .stageFlags 
+                nullptr                                                         // .pImmutableSamplers 
+        };
+        config.descriptorLayout[3] = {
+                3,                                                              // .binding 
+                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,                      // .descriptorType 
+                1,                                                              // .descriptorCount 
+                VK_SHADER_STAGE_FRAGMENT_BIT,                                   // .stageFlags 
                 nullptr                                                         // .pImmutableSamplers 
         };
 }
@@ -1376,12 +1384,15 @@ public:
         void initialize(VkDevice vk_device) {
                 //-----------------------------
 
-                poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                poolSize.descriptorCount = poolCount * 3;
+                poolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                poolSize[0].descriptorCount = poolCount;
+
+                poolSize[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                poolSize[1].descriptorCount = poolCount;
 
                 poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-                poolInfo.poolSizeCount = 1;
-                poolInfo.pPoolSizes = &poolSize;
+                poolInfo.poolSizeCount = 2;
+                poolInfo.pPoolSizes = poolSize;
                 poolInfo.maxSets = poolCount;
 
                 if (vkCreateDescriptorPool(vk_device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
@@ -1410,8 +1421,15 @@ public:
                 bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
                 bindings[2].pImmutableSamplers = nullptr;
 
+                bindings[3].binding = 3;
+                bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                bindings[3].descriptorCount = 1;
+                bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+                bindings[3].pImmutableSamplers = nullptr;
+
+
                 layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-                layoutInfo.bindingCount = 3;
+                layoutInfo.bindingCount = 4;
                 layoutInfo.pBindings = bindings;
 
                 if (vkCreateDescriptorSetLayout(vk_device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
@@ -1436,24 +1454,30 @@ public:
         }
 
         void updateDescriptorSetAll(
-                VkDevice vk_device,
-                VkDescriptorSet descriptorSet,
+                const VkDevice& vk_device,
+                const VkDescriptorSet& descriptorSet,
                 
-                VkBuffer objectBuffer,
-                VkDeviceSize objectSize,
+                VkBuffer objectBuffer, VkDeviceSize objectSize,
                 
-                VkBuffer directionalBuffer,
-                VkDeviceSize directionalSize,
+                VkBuffer directionalBuffer, VkDeviceSize directionalSize,
                 
-                VkBuffer pointBuffer,
-                VkDeviceSize pointSize) {
+                VkBuffer pointBuffer, VkDeviceSize pointSize,
+                
+                VkImageView textureView,
+                VkSampler sampler
+        ) {
+                VkDescriptorBufferInfo bufferInfos[3] = {
+                        { objectBuffer, 0, objectSize },
+                        { directionalBuffer, 0, directionalSize },
+                        { pointBuffer, 0, pointSize }
+                };
 
-                VkDescriptorBufferInfo bufferInfos[3] = {};
-                bufferInfos[0] = { objectBuffer, 0, objectSize };
-                bufferInfos[1] = { directionalBuffer, 0, directionalSize };
-                bufferInfos[2] = { pointBuffer, 0, pointSize };
+                VkDescriptorImageInfo imageInfo = {};
+                imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                imageInfo.sampler = sampler;
+                imageInfo.imageView = textureView;
 
-                VkWriteDescriptorSet writes[3] = {};
+                VkWriteDescriptorSet writes[4] = {};
                 for (uint32_t i = 0; i < 3; ++i) {
                         writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
                         writes[i].dstSet = descriptorSet;
@@ -1464,7 +1488,16 @@ public:
                         writes[i].pBufferInfo = &bufferInfos[i];
                 }
 
-                vkUpdateDescriptorSets(vk_device, 3, writes, 0, nullptr);
+                writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                writes[3].dstSet = descriptorSet;
+                writes[3].dstBinding = 3;
+                writes[3].dstArrayElement = 0;
+                writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                writes[3].descriptorCount = 1;
+                writes[3].pImageInfo = &imageInfo;
+
+
+                vkUpdateDescriptorSets(vk_device, 4, writes, 0, nullptr);
         }
 
         void cleanup(VkDevice vk_device) {
@@ -1479,9 +1512,9 @@ public:
                 }
         }
 private:
-        VkDescriptorPoolSize poolSize = {};
+        VkDescriptorPoolSize poolSize[2] = {};
         VkDescriptorPoolCreateInfo poolInfo = {};
-        VkDescriptorSetLayoutBinding bindings[3] = {};
+        VkDescriptorSetLayoutBinding bindings[4] = {};
         VkDescriptorSetLayoutCreateInfo layoutInfo = {};
         VkDescriptorSetAllocateInfo allocInfo = {};
 };
@@ -1861,28 +1894,21 @@ int main(int argc, char** argv) {
                 vklGetDdsImageInfo(tiles_diffuseDdsTexturePath.data())
         };
 
-        std::vector<VkImage> texturesVkImages = {
-                vklCreateDeviceLocalImageWithBackingMemory(
-                        vk_physical_device, vk_device,
+        std::vector<VkImage> texturesVkImages;
+        for (const auto& info : texturesVklImageInfo) {
+                texturesVkImages.push_back(
+                        vklCreateDeviceLocalImageWithBackingMemory(
+                                vk_physical_device, vk_device,
 
-                        texturesVklImageInfo[0].extent.width,
-                        texturesVklImageInfo[0].extent.height,
-                        texturesVklImageInfo[0].imageFormat,
+                                info.extent.width,
+                                info.extent.height,
+                                info.imageFormat,
 
-                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-                ),
-
-                vklCreateDeviceLocalImageWithBackingMemory(
-                        vk_physical_device, vk_device,
-                        
-                        texturesVklImageInfo[1].extent.width,
-                        texturesVklImageInfo[1].extent.height,
-                        texturesVklImageInfo[1].imageFormat,
-
-                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-                ),
-        };
-
+                                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                        )
+                );
+        }
+        
         // creating a VkCommandPool
         VkCommandPoolCreateInfo poolCreateInfo = {};
         poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -2034,7 +2060,7 @@ int main(int argc, char** argv) {
         samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
         samplerCreateInfo.minLod = 0.0f;
-        samplerCreateInfo.minLod = VK_LOD_CLAMP_NONE;
+        samplerCreateInfo.maxLod = VK_LOD_CLAMP_NONE;
 
         samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -2066,7 +2092,7 @@ int main(int argc, char** argv) {
         // Cylinder settings
         UniformBufferObject ubo_cylinder = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode, uvMode)
-                .set_material(glm::vec4(0.1f, 0.9f, 0.3f, 5))
+                .set_material(glm::vec4(0.1f, 0.7f, 0.1f, 2))
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.3f * glm::vec3(0, 1, 0))
                 .setViewMatrix(main_camera.getView())
@@ -2082,7 +2108,7 @@ int main(int argc, char** argv) {
         // Bezier Cylinder settings
         UniformBufferObject ubo_bezier_cyl = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode, uvMode)
-                .set_material(glm::vec4(0.1f, 0.9f, 0.3f, 5))
+                .set_material(glm::vec4(0.1f, 0.7f, 0.3f, 8))
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .setViewMatrix(main_camera.getView())
                 .setProjectionMatrix(main_camera.getProjection())
@@ -2097,7 +2123,7 @@ int main(int argc, char** argv) {
         // Sphere2 settings
         UniformBufferObject ubo_sphere_2 = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode, uvMode)
-                .set_material(glm::vec4(0.05f, 0.8f, 0.5f, 10))
+                .set_material(glm::vec4(0.1f, 0.7f, 0.3f, 8))
                 .apply_translation(0.6f * glm::vec3(1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
                 .setViewMatrix(main_camera.getView())
@@ -2110,17 +2136,18 @@ int main(int argc, char** argv) {
         ubo_builder.reset();
         
 
-        // Sphere settings
-        UniformBufferObject ubo_shpere_1 = ubo_builder
+        // Box settings
+        UniformBufferObject ubo_box = ubo_builder
                 .uploadDrawModes(normalMode, fresnelMode, uvMode)
-                .set_material(glm::vec4(0.05f, 0.8f, 0.5f, 10))
+                .set_material(glm::vec4(0.1f, 0.7f, 0.1f, 2))
+                .apply_rotation(PI / 4, glm::vec3(0, 1, 0))
                 .apply_translation(0.6f * glm::vec3(-1, 0, 0))
                 .apply_translation(0.9f * glm::vec3(0, -1, 0))
                 .setViewMatrix(main_camera.getView())
                 .setProjectionMatrix(main_camera.getProjection())
                 .compute_normals_matrix()
                 .get_ubo();
-        VkBuffer sphere1_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_shpere_1);
+        VkBuffer box_uniform_buffer = ObjectSettings::makeVkBufferfromUBOandUpload(ubo_box);
         
         
         ubo_builder.reset();
@@ -2169,7 +2196,7 @@ int main(int argc, char** argv) {
         };
         Bezier curve(controlPoints, 0.21f, 36, 20, { 0.75, 0.25, 0.01 });
         Sphere sphere2  = Sphere(0.26f, 18, 36, { 0.0, 0.21, 0.16 });
-        Sphere sphere1 = Sphere(0.26f, 18, 36, { 0.0, 0.21, 0.16 });
+        Cube box = Cube(0.34f, 0.34f, 0.34f, { 0.0, 0.21, 0.16 });
         Torus torus = Torus(1.1f, 0.1f, 32, 8, { 0,0,0 }, { 0.38, 0.67, 0.84 });
 #pragma endregion
 
@@ -2178,7 +2205,7 @@ int main(int argc, char** argv) {
     ubo_manager.initialize(vk_device);
 
     VkDescriptorSet descriptorSet_cornell = ubo_manager.allocateDescriptorSets(vk_device);
-    VkDescriptorSet descriptorSet_sphere1 = ubo_manager.allocateDescriptorSets(vk_device);
+    VkDescriptorSet descriptorSet_box = ubo_manager.allocateDescriptorSets(vk_device);
     VkDescriptorSet descriptorSet_cyl = ubo_manager.allocateDescriptorSets(vk_device);
     VkDescriptorSet descriptorSet_bez_cyl = ubo_manager.allocateDescriptorSets(vk_device);
     VkDescriptorSet descriptorSet_sphere2 = ubo_manager.allocateDescriptorSets(vk_device);
@@ -2191,37 +2218,43 @@ int main(int argc, char** argv) {
             vk_device, descriptorSet_cornell,
             cornell_uniform_buffer, sizeof(UniformBufferObject),
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
-            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
+            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject),
+            myVkImageViews[0], sampler);
     // Cube
     ubo_manager.updateDescriptorSetAll(
-            vk_device, descriptorSet_sphere1,
-            sphere1_uniform_buffer, sizeof(UniformBufferObject),
+            vk_device, descriptorSet_box,
+            box_uniform_buffer, sizeof(UniformBufferObject),
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
-            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
+            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject),
+            myVkImageViews[0], sampler);
     // Cylinder
     ubo_manager.updateDescriptorSetAll(
             vk_device, descriptorSet_cyl,
             cylinder_uniform_buffer, sizeof(UniformBufferObject),
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
-            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
+            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject),
+            myVkImageViews[0], sampler);
     // Bezier Cylinder
     ubo_manager.updateDescriptorSetAll(
             vk_device, descriptorSet_bez_cyl,
             bezier_cylinder_uniform_buffer, sizeof(UniformBufferObject),
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
-            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
+            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject),
+            myVkImageViews[1], sampler);
     // Sphere
     ubo_manager.updateDescriptorSetAll(
             vk_device, descriptorSet_sphere2,
             sphere2_uniform_buffer, sizeof(UniformBufferObject),
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
-            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
+            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject),
+            myVkImageViews[1], sampler);
     // Torus
     ubo_manager.updateDescriptorSetAll(
             vk_device, descriptorSet_torus,
             torus_uniform_buffer, sizeof(UniformBufferObject),
             dirLight_vk_buffer, sizeof(DirectionalLight_UniformBufferObject),
-            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject));
+            pointLight_vk_buffer, sizeof(PointLight_UniformBufferObject),
+            myVkImageViews[0], sampler);
 
     auto cornellPipelines = pipeline_factory(cornellBox_VS_Shader_path, cornellBox_FS_Shader_path);
     auto gouraudPipelines = pipeline_factory(gouraudShading_VS_Shader_path, gouraudShading_FS_Shader_path);
@@ -2251,11 +2284,11 @@ int main(int argc, char** argv) {
         ObjectSettings::update_normal_matrix(ubo_cornellBox);
         vklCopyDataIntoHostCoherentBuffer(cornell_uniform_buffer, &ubo_cornellBox, sizeof(ubo_cornellBox));
         
-        ubo_shpere_1.matrix_view = mainCamera_view;
-        ubo_shpere_1.view_inverse = mainCamera_virewInverse;
-        ubo_shpere_1.drawModes = glm::ivec4(normalMode, fresnelMode, uvMode, 0);
-        ObjectSettings::update_normal_matrix(ubo_shpere_1);
-        vklCopyDataIntoHostCoherentBuffer(sphere1_uniform_buffer, &ubo_shpere_1, sizeof(ubo_shpere_1));
+        ubo_box.matrix_view = mainCamera_view;
+        ubo_box.view_inverse = mainCamera_virewInverse;
+        ubo_box.drawModes = glm::ivec4(normalMode, fresnelMode, uvMode, 0);
+        ObjectSettings::update_normal_matrix(ubo_box);
+        vklCopyDataIntoHostCoherentBuffer(box_uniform_buffer, &ubo_box, sizeof(ubo_box));
 
         ubo_cylinder.matrix_view = mainCamera_view;
         ubo_cylinder.view_inverse = mainCamera_virewInverse;
@@ -2282,15 +2315,14 @@ int main(int argc, char** argv) {
         vklStartRecordingCommands();
         
         VkPipeline cornellPipeline = choose_pipeline(cornellPipelines);
-        VkPipeline gouraudPipeline = choose_pipeline(gouraudPipelines);
+        //VkPipeline gouraudPipeline = choose_pipeline(gouraudPipelines);
         VkPipeline phongPipeline = choose_pipeline(phongPipelines);
         
         alexd_drawObject(cornellPipeline, descriptorSet_cornell, cornellBox.get_vk_vbuff(), cornellBox.get_vk_ibuff(), static_cast<uint32_t>(cornellBox.get_ibuff_size()));
-        
         alexd_drawObject(phongPipeline, descriptorSet_cyl, cylinder.get_vk_vbuff(), cylinder.get_vk_ibuff(), static_cast<uint32_t>(cylinder.get_ibuff_size()));
         alexd_drawObject(phongPipeline, descriptorSet_bez_cyl, curve.get_vk_vbuff(), curve.get_vk_ibuff(), static_cast<uint32_t>(curve.get_ibuff_size()));
-        alexd_drawObject(phongPipeline, descriptorSet_sphere1, sphere1.get_vk_vbuff(), sphere1.get_vk_ibuff(), static_cast<uint32_t>(sphere1.get_ibuff_size()));
-        alexd_drawObject(gouraudPipeline, descriptorSet_sphere2, sphere2.get_vk_vbuff(), sphere2.get_vk_ibuff(), static_cast<uint32_t>(sphere2.get_ibuff_size()));
+        alexd_drawObject(phongPipeline, descriptorSet_box, box.get_vk_vbuff(), box.get_vk_ibuff(), static_cast<uint32_t>(box.get_ibuff_size()));
+        alexd_drawObject(phongPipeline, descriptorSet_sphere2, sphere2.get_vk_vbuff(), sphere2.get_vk_ibuff(), static_cast<uint32_t>(sphere2.get_ibuff_size()));
         //alexd_drawObject(vk_pipeline, descriptorSet_torus, torus.get_vk_vbuff(), torus.get_vk_ibuff(), static_cast<uint32_t>(torus.get_ibuff_size()));
         
         vklEndRecordingCommands();
@@ -2324,7 +2356,7 @@ int main(int argc, char** argv) {
 
     ubo_manager.cleanup(vk_device);
 
-    sphere1.destroyVkBuffers();
+    box.destroyVkBuffers();
     cornellBox.destroyVkBuffers();
     cylinder.destroyVkBuffers();
     sphere2.destroyVkBuffers();
@@ -2342,7 +2374,7 @@ int main(int argc, char** argv) {
     vkDestroySampler(vk_device, sampler, nullptr);
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(cornell_uniform_buffer);
-    vklDestroyHostCoherentBufferAndItsBackingMemory(sphere1_uniform_buffer);
+    vklDestroyHostCoherentBufferAndItsBackingMemory(box_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(cylinder_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(bezier_cylinder_uniform_buffer);
     vklDestroyHostCoherentBufferAndItsBackingMemory(sphere2_uniform_buffer);
