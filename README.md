@@ -51,12 +51,19 @@ Windows path length is a major problem often, it is restricted to 260 characters
 - scroll wheel: zoom in / out
 
 - Z: reset camera position
+- N: view normals
+- F: toggle Fresnel effect
+- T: view UV coordinates on models
+
 
 - F1: wireframe on / off
 - F2: cycle: cull modes (none, front, back)
 - F5: reload shaders
 
 # Procedural meshes: cylinders, sphere and bezier curves
+
+# Lighting: Phong Shading
+
 
 > I wanted to answer to someone with this message but I did not. I was afraid I gave too much details.
 
