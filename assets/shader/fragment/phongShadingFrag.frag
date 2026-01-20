@@ -2,6 +2,8 @@
 
 layout(std140, binding = 0) uniform UBO {
     ivec4 drawModes;
+    
+    // [ka, kd, ks, alpha]
     vec4 material;
 
     mat4 matrix_model;
@@ -30,7 +32,10 @@ vec3 computeDirectionalLighting(vec3 positionViewSpace, vec3 normalViewSpace, ve
     float directionalDiffuse = max(dot(normalViewSpace, directionalLightDirection), 0.0);
 
     vec3 directionalReflection = reflect(-directionalLightDirection, normalViewSpace);
-    float directionalSpecular = pow(max(dot(viewDirection, directionalReflection), 0.0), ubo.material.w);
+    float directionalSpecular = pow(
+        max(dot(viewDirection, directionalReflection), 0.0),
+        ubo.material.w
+    );
 
     return
         ubo.material.x * ubo_dirLight.color.rgb +

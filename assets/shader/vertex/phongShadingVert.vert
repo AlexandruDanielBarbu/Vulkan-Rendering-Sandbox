@@ -2,11 +2,14 @@
 
 layout(std140, binding = 0) uniform UBO {
     ivec4 drawModes;
+
+    // [ka, kd, ks, alpha]
     vec4 material;
 
     mat4 matrix_model;
     mat4 matrix_view;
     mat4 matrix_projection;
+    
     mat4 matrix_normals;
     mat4 view_inverse;
 } ubo;
@@ -40,7 +43,7 @@ void main()
     fragNormalVS   = normalize(mat3(ubo.matrix_normals) * inNormal);
     fragColor = inColor;
 
-    // Get normalisez and scaled normal to display it as a color
+    // Get normalize and scaled normal to display it as a color
     vec3 scaledNormal = 0.5 * fragNormalVS + 0.5;
     normalColor = vec3(
             pow(scaledNormal.x, 2.2),

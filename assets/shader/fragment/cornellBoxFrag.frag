@@ -101,8 +101,6 @@ void main() {
             pow(scaledNormal.z, 2.2),
             1
         );
-
-        //outColor = vec4(scaledNormal, 1);
     }
 
     //if (ubo.drawModes.z == 1) {
