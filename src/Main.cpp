@@ -1882,6 +1882,12 @@ int main(int argc, char** argv) {
 
         auto woodDdsTexturePath = gcgLoadShaderFilePath("assets/textures/wood_texture.dds");
         auto tiles_diffuseDdsTexturePath = gcgLoadShaderFilePath("assets/textures/tiles_diffuse.dds");
+
+        const char* texturePaths[] = {
+                woodDdsTexturePath.data(),
+                tiles_diffuseDdsTexturePath.data()
+        };
+
 #pragma endregion
 
         std::vector<VkBuffer> texturesVkBuffers = {
@@ -1904,7 +1910,7 @@ int main(int argc, char** argv) {
                                 info.extent.height,
                                 info.imageFormat,
 
-                                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+                                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
                         )
                 );
         }
@@ -1940,57 +1946,75 @@ int main(int argc, char** argv) {
                 VKL_EXIT_WITH_ERROR("Error in begin command buffer.");
         }
 
+        std::vector<VkBuffer> mipMapBuffers;
         for (size_t i = 0; i < texturesVkImages.size(); i++)
         {
-                VkImageMemoryBarrier barrier = {};
-                barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-                barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-                barrier.image = texturesVkImages[i];
-                barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                barrier.subresourceRange.baseMipLevel = 0;
-                barrier.subresourceRange.levelCount = 1;
-                barrier.subresourceRange.baseArrayLayer = 0;
-                barrier.subresourceRange.layerCount = 1;
-                barrier.srcAccessMask = 0;
-                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                uint32_t mipMapLevelsCount = 1 + static_cast<uint32_t>(std::floor(std::log2(std::max(texturesVklImageInfo[i].extent.height, texturesVklImageInfo[i].extent.width))));
 
-                vkCmdPipelineBarrier(
-                        myCommandBuffer,
-                        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                        0, 0, nullptr, 0, nullptr, 1, &barrier
-                );
+                for (uint32_t level = 0; level < mipMapLevelsCount; level++)
+                {
+                        VkBuffer levelVkBuffer = vklLoadDdsImageLevelIntoHostCoherentBuffer(texturePaths[i], level);
+                        mipMapBuffers.push_back(levelVkBuffer);
 
-                VkBufferImageCopy region = {};
-                region.bufferOffset = 0;
-                region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                region.imageSubresource.mipLevel = 0;
-                region.imageSubresource.baseArrayLayer = 0;
-                region.imageSubresource.layerCount = 1;
-                region.imageExtent.width = texturesVklImageInfo[i].extent.width;
-                region.imageExtent.height = texturesVklImageInfo[i].extent.height;
-                region.imageExtent.depth = 1;
+                        VklImageInfo levelInfo = vklGetDdsImageLevelInfo(texturePaths[i], level);
 
-                vkCmdCopyBufferToImage(
-                        myCommandBuffer,
-                        texturesVkBuffers[i],
-                        texturesVkImages[i],
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        1, &region
-                );
+                        VkImageMemoryBarrier barrier = {};
+                        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                        barrier.image = texturesVkImages[i];
+                        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                        barrier.subresourceRange.baseMipLevel = level;
+                        barrier.subresourceRange.levelCount = 1;
+                        barrier.subresourceRange.baseArrayLayer = 0;
+                        barrier.subresourceRange.layerCount = 1;
+                        barrier.srcAccessMask = 0;
+                        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
-                barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                        vkCmdPipelineBarrier(
+                                myCommandBuffer,
+                                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0, 0, nullptr, 0, nullptr, 1, &barrier
+                        );
 
-                vkCmdPipelineBarrier(
-                        myCommandBuffer,
-                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                        0, 0, nullptr, 0, nullptr, 1, &barrier
-                );
+                        VkBufferImageCopy region = {};
+                        region.bufferOffset = 0;
+                        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                        region.imageSubresource.mipLevel = level;
+                        region.imageSubresource.baseArrayLayer = 0;
+                        region.imageSubresource.layerCount = 1;
+                        region.imageExtent.width  = levelInfo.extent.width;
+                        region.imageExtent.height = levelInfo.extent.height;
+                        region.imageExtent.depth = 1;
+
+                        vkCmdCopyBufferToImage(
+                                myCommandBuffer,
+                                levelVkBuffer,
+                                texturesVkImages[i],
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                1, &region
+                        );
+
+                        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+                        vkCmdPipelineBarrier(
+                                myCommandBuffer,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                0, 0, nullptr, 0, nullptr, 1, &barrier
+                        );
+                }
+
+
+
+
+
+
+
         }
 
 
@@ -2025,12 +2049,14 @@ int main(int argc, char** argv) {
         std::vector<VkImageView> myVkImageViews;
         for (size_t i = 0; i < texturesVkImages.size(); i++) {
 
+                uint32_t mipMapLevelsCount = 1 + static_cast<uint32_t>(std::floor(std::log2(std::max(texturesVklImageInfo[i].extent.height, texturesVklImageInfo[i].extent.width))));
+
                 VkImageViewCreateInfo imageViewCreateInfo = {};
                 imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                imageViewCreateInfo.flags = 0;
                 imageViewCreateInfo.image = texturesVkImages[i];
                 imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
                 imageViewCreateInfo.format = texturesVklImageInfo[i].imageFormat;
-                imageViewCreateInfo.flags = 0;
 
                 imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
                 imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -2039,7 +2065,7 @@ int main(int argc, char** argv) {
 
                 imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
                 imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-                imageViewCreateInfo.subresourceRange.levelCount = 1;
+                imageViewCreateInfo.subresourceRange.levelCount = mipMapLevelsCount;
                 imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
                 imageViewCreateInfo.subresourceRange.layerCount = 1;
 
@@ -2371,6 +2397,8 @@ int main(int argc, char** argv) {
     for (const auto& thing : texturesVkBuffers) vklDestroyHostCoherentBufferAndItsBackingMemory(thing);
     for (const auto& thing : texturesVkImages) vklDestroyDeviceLocalImageAndItsBackingMemory(thing);
     for (const auto& thing : myVkImageViews) vkDestroyImageView(vk_device, thing, nullptr);
+    for (const auto& thing : mipMapBuffers) vklDestroyHostCoherentBufferAndItsBackingMemory(thing);
+
     vkDestroySampler(vk_device, sampler, nullptr);
 
     vklDestroyHostCoherentBufferAndItsBackingMemory(cornell_uniform_buffer);
