@@ -90,7 +90,21 @@ We supplied you with a make.bat file for windows and a makefile for MacOS/Linux.
 
 # How to run - step 3
 
-With Visual Studio 2022 open, press the green triangle at the top (make sure `GCGProject_VK.exe` is selected) to run the engine in **Debug mode**.
+```bash
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 # for visual studio 2022
+```
+
+```bash
+cmake --build build --config Debug --parallel   # for debug
+```
+
+```bash
+cmake --build build --config Release --parallel # for release
+```
+
+```bash
+.\build\Release\GCGProject_VK.exe # do this step in the root of the project
+```
 
 # Project Structure - relevant folders
 
