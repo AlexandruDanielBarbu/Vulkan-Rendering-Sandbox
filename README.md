@@ -1,177 +1,160 @@
-# Vulkan-Rendering-Sandbox
+# Vulkan Rendering Sandbox
 
-## Index
+A real-time 3D rendering engine written from scratch in C++ and Vulkan. It renders procedurally generated geometry with physically-inspired lighting, written directly against the Vulkan API for explicit control over the GPU pipeline — without a high-level engine like Unity or Unreal.
 
-- [Intro to the project](#intro-to-the-project)
-  - [Overview of the branches](#overview-of-the-branches)
-- [How to run - step 1](#how-to-run---step-1)
-  - [Prerequesites](#prerequesites)
-    - [Visual Studio 2022](#visual-studio-2022)
-    - [CMake](#cmake)
-    - [VULKAN](#vulkan)
-    - [Linux requirements](#linux-requirements)
-- [How to run - step 2](#how-to-run---step-2)
-  - [Download the libraries](#download-the-libraries)
-  - [In VS 2022](#in-vs-2022)
-  - [Alternative: Using your default generator](#alternative-using-your-default-generator)
-- [How to run - step 3](#how-to-run---step-3)
-- [Project Structure - relevant folders](#project-structure---relevant-folders)
-- [Errors and FAQ](#errors-and-faq)
-- [Controls](#controls)
+Developed for the **Fundamentals of Computer Graphics** course at **TU Wien**.
+
+## Table of Contents
+
 - [Features](#features)
-- [Challenges](#challenges)
-  - [Structuring the code](#structuring-the-code)
-  - [Procedural meshes](#procedural-meshes)
-  - [Normals](#normals)
-- [Helpful tutorials that I used](#helpful-tutorials-that-i-used)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Build and Run](#build-and-run)
+- [Controls](#controls)
+- [Project Structure](#project-structure)
+- [Development Milestones](#development-milestones)
+- [Engineering Notes](#engineering-notes)
+- [Troubleshooting](#troubleshooting)
+- [Assets and Licensing](#assets-and-licensing)
+- [References](#references)
 
-# Intro to the project
+## Features
 
-This Rendering Engine was developed as part of an assignment at **Technische Universität Wien** for the course **Grundlagen der Computergraphik** ([Fundamentals of Computer Graphics](https://www.cg.tuwien.ac.at/courses/GCG/VU/2025W)).
+- **Procedural geometry** — generates spheres, cylinders, and tori at runtime with a configurable subdivision count for level-of-detail control.
+- **Bézier curve geometry** — renders cylindrical surfaces defined by Bézier curves via De Casteljau's algorithm.
+- **Phong shading** — per-fragment lighting computed in the fragment shader.
+- **Gouraud shading** — per-vertex lighting computed in the vertex shader, for direct comparison.
+- **Fresnel effect** — view-dependent reflectance using Schlick's approximation.
+- **Mipmapping** — improves texture filtering and reduces aliasing on distant surfaces.
+- **Texturing** — procedurally maps UV coordinates onto 2D textures across the geometry.
 
-For this project, I was provided access to the course-specific framework (functions starting with `gcg`) and the [Vulkan Launchpad framework](https://github.com/cg-tuwien/VulkanLaunchpad) (functions starting with `vkl`).
+## Tech Stack
 
-Assets such as images and `.ini` files are the property of TU Wien. Please obtain explicit permission before using these assets outside the scope of this project.
+| Category       | Technology                                                                 |
+|----------------|----------------------------------------------------------------------------|
+| Language       | C++17                                                                       |
+| Graphics API   | Vulkan 1.3                                                                  |
+| Build System   | CMake 3.24+                                                                 |
+| Shaders        | GLSL (compiled to SPIR-V)                                                   |
+| Frameworks     | [Vulkan Launchpad](https://github.com/cg-tuwien/VulkanLaunchpad) (`vkl`), TU Wien GCG framework (`gcg`) |
 
-With that said, I would like to thank the GCG team for organizing and maintaining such an engaging course. My best regards to you all, and I hope you will hear good things about my work in the future.
+## Getting Started
 
-## Overview of the branches
+### Prerequisites
 
-From branch 0 to 6 (the latter being the final version of the engine, which is integrated into `main`), you can inspect various development milestones. The code is intended to run at each milestone, so if you're curious when a feature was introduced or how the engine looked earlier, you can simply:
+| Tool               | Version                                  | Link                                          |
+|--------------------|------------------------------------------|-----------------------------------------------|
+| Visual Studio 2022 | Community+, with C++ Development Tools    | https://visualstudio.microsoft.com/vs/        |
+| CMake              | 3.24 or higher                           | https://cmake.org/download/                   |
+| Vulkan SDK         | 1.3.216.0 or newer                       | https://vulkan.lunarg.com/                    |
 
-```bash
-git checkout task1 # for example
+Developed and tested on **Windows 11 with Visual Studio 2022**. This is the recommended setup. CLion is known to cause build issues.
 
-# Now run from Visual Studio and play around.
-```
-
-# How to run - step 1
-
-## Prerequesites
-
-### Visual Studio 2022
-
-**Download and install `Visual Studio Community 2022`** from [https://visualstudio.microsoft.com/vs/](https://visualstudio.microsoft.com/vs/) with the C++ Development Tools selected.
-
-### CMake
-
-**Download and install `CMake 3.24` or higher** from [https://cmake.org/download/](https://cmake.org/download/).
-
-### VULKAN
-
-**Download and install the `Vulkan SDK 1.3.216.0` or newer** from [https://vulkan.lunarg.com/](https://vulkan.lunarg.com/).
-
-> [!WARNING]
-> The project was developed on Windows 11. For best results I strongly recommend you test the project on a Windows 11 PC.
-
-### Linux requirements
-
-If you open this framework on Linux, please first run the script `./scripts/linux/install_dependencies.sh` which will install most necessary dependencies except for VS Code and its extensions.
-
-
-# How to run - step 2
-
-## Download the libraries
-
-Execute the `download_assets_and_libs`script, depending on your operating system. This will download the necessary shared library files.
-
-> [!WARNING]
-> For developing this project I used Windows 11. I strongly recommend you also use Visual Studio 2022 for the best experience.
-> Please note that you might have some problems if you use CLion.
-
-## In VS 2022
-
-1. Open the Framework as folder in VS 2022 (right-click in the folder containing the `CMakeLists.txt` and select "Open with Visual Studio").
-2. The contained `CMakeLists.txt` will automatically be used by Visual Studio to load the project and the CMake configuration process is started immediately and the CMake output should be visible automatically. If not, please right-click on `CMakeLists.txt` and select "Configure project_name".
-
-## Alternative: Using your default generator
-
-We supplied you with a make.bat file for windows and a makefile for MacOS/Linux. You can double click make.bat or execute `make debug` or `make release` to build with your default cmake generator (for example Visual Studio 2022 or Xcode). Project files can be found in `_project` afterwards. You can edit the files to change the generator for example to Xcode by adding a `-G "Xcode"` to the cmake generation command (first line). You can also use CLion or VS Code as an IDE, but on Windows it will require the installation of Visual Studio 2022 nonetheless, as you need the accompanying MSVC compiler.
-
-# How to run - step 3
+On Linux, run the dependency script first to install most prerequisites (excludes VS Code and its extensions):
 
 ```bash
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 # for visual studio 2022
+./scripts/linux/install_dependencies.sh
 ```
+
+### Build and Run
+
+**1. Download assets and shared libraries.** Run the `download_assets_and_libs` script matching your operating system.
+
+**2. Configure and build.** Choose one of the methods below.
+
+Visual Studio 2022 (recommended):
+
+1. Right-click the folder containing `CMakeLists.txt` and select *Open with Visual Studio*.
+2. Visual Studio detects `CMakeLists.txt` and starts CMake configuration automatically. If it doesn't, right-click `CMakeLists.txt` and select *Configure*.
+
+Command line:
 
 ```bash
-cmake --build build --config Debug --parallel   # for debug
+# Configure
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+# Build (debug)
+cmake --build build --config Debug --parallel
+
+# Build (release)
+cmake --build build --config Release --parallel
 ```
+
+Default generator (make):
+
+Double-click `make.bat` (Windows) or run `make debug` / `make release` (macOS/Linux). Project files are generated in `_project/`. To switch generators (for example, Xcode), add `-G "Xcode"` to the cmake command in the makefile. On Windows you still need Visual Studio 2022 installed for the MSVC compiler, even when using VS Code or CLion.
+
+**3. Run** from the project root:
 
 ```bash
-cmake --build build --config Release --parallel # for release
+.\build\Release\GCGProject_VK.exe
 ```
+
+## Controls
+
+| Key / Input       | Action                                  |
+|-------------------|-----------------------------------------|
+| `Esc`             | Close the application                   |
+| Left mouse        | Arcball camera rotation                 |
+| Right mouse       | Strafe camera                           |
+| Scroll wheel      | Zoom in / out                           |
+| `Z`               | Reset camera position                   |
+| `N`               | Visualize normals                       |
+| `F`               | Toggle Fresnel effect                   |
+| `T`               | View UV coordinates on models           |
+| `F1`              | Toggle wireframe                        |
+| `F2`              | Cycle cull modes (none, front, back)    |
+| `F5`              | Reload shaders                          |
+
+## Project Structure
+
+```
+.
+├── assets/
+│   └── shaders/        # GLSL shader source (auto-discovered at runtime)
+├── src/                # Engine source code
+├── scripts/            # Setup and dependency scripts
+└── CMakeLists.txt
+```
+
+Shaders are loaded from `assets/shaders/` at runtime — the application searches this folder automatically. Source code lives in `src/`.
+
+## Development Milestones
+
+The repository is organized as a progression of branches, from `task0` through `task6` (the final version, merged into `main`). Each milestone is runnable on its own, so you can trace how the engine evolved feature by feature:
 
 ```bash
-.\build\Release\GCGProject_VK.exe # do this step in the root of the project
+git checkout task1   # inspect an earlier milestone, then build and run
 ```
 
-# Project Structure - relevant folders
+## Engineering Notes
 
-Shader Code is located in the `assets/shaders/` folder, and the application will try to find any shaders inside this folder.
+**Code architecture.** An unstructured `main.cpp` becomes unmaintainable quickly, so the engine is organized using classes and `#region` blocks to separate responsibilities and keep the entry point readable — a pragmatic structure suited to the project's scope.
 
-Source Code is located in the `src` folder.
+**Procedural mesh generation.** Generating meshes surfaced a cluster of subtle bugs: incorrect winding order, malformed triangle indices, and missing or duplicated vertices in the vertex buffer. These were debugged through wireframe inspection and methodical trial-and-error. One known artifact remains on a single face of the small cube, kept as a documented learning case rather than silently patched.
 
-# Errors and FAQ
+**Normals and view-space lighting.** All lighting is computed in view space to simplify the math. This introduces a tradeoff: the normal-visualization mode renders normals relative to the camera, so they always appear to face the viewer. Compared side-by-side with the reference solution, the engine shows slightly reduced specular intensity — an open thread being carried into a follow-up project, _RexCore_.
 
-Please follow the instructions of this readme carefully if something does not work.
-If everything was done correctly, please look if a new checkout of the Repo in a different location helps.
-Sometimes CMake caches can interfere for example. Sometimes project caches can also lead to problems.
-Windows path length is a major problem often, it is restricted to 260 characters and you should place the repository into a short path
+## Troubleshooting
 
-# Controls:
+| Problem                          | Fix                                                                                          |
+|----------------------------------|----------------------------------------------------------------------------------------------|
+| Build fails inexplicably         | Try a fresh checkout in a new location. Stale CMake or project caches are a common cause.    |
+| Path-related errors on Windows   | Windows caps paths at 260 characters. Place the repo in a short directory (e.g. `C:\dev\vrs`). |
+| Shaders not found                | Ensure they are in `assets/shaders/` — the app searches this folder at runtime.             |
 
-| Key | Action |
-|-----|--------|
-| esc | close the application |
-|-----|--------|
-| left mouse btn  | arcball camera |
-| right mouse btn | strafe camera |
-| scroll wheel    | zoom in / out |
-|-----|--------|
-| Z | reset camera position |
-| N | view normals |
-| F | toggle Fresnel effect |
-| T | view UV coordinates on models |
-|-----|--------|
-| F1 | wireframe on / off |
-| F2 | cycle: cull modes (none, front, back) |
-| F5 | reload shaders |
+## Assets and Licensing
 
-# Features:
+This engine was developed as coursework for [Fundamentals of Computer Graphics](https://www.cg.tuwien.ac.at/courses/GCG/VU/2025W) at TU Wien, using the course's `gcg` framework and the [Vulkan Launchpad](https://github.com/cg-tuwien/VulkanLaunchpad) (`vkl`) framework.
 
-- **Bézier curve geometry**: Supports rendering cylindrical geometry defined by Bézier curves.
-- **Procedural geometry with custom level of detail**: Generates meshes for **spheres**, **cylinders**, and **tori** (see branch `boni4`) with user defined number of subdivisions.
-- **Mipmapping**: Uses mipmaps to improve texture filtering and reduce aliasing at distance.
-- **Texturing**: Procedurally adjusts UV coordinates to a 2D textures to rendered geometry.
-- **Phong / Gouraud shading**:
-  - **Phong shading** (per-fragment lighting) implemented in the **fragment shader**
-  - **Gouraud shading** (per-vertex lighting) implemented in the **vertex shader**
-- **Fresnel effect**: Implements a Fresnel term using Schlick's approximation for view-dependent reflectance.
+Assets (images, `.ini` files) are the property of TU Wien. Obtain explicit permission before reusing them outside this project.
 
-# Challenges
+## References
 
-## Structuring the code
-
-When starting this assignment, I quickly realized I needed to organize my code early on. Even though I could have done more to reduce the complexity of `main.cpp`, I found that using `#region`s and classes worked well for the scope of this engine.
-
-## Procedural meshes
-
-I ran into several issues while generating meshes. At times I used the wrong winding order for faces, specified incorrect indices for a triangle, or inserted the wrong vertices (or forgot to insert some) into the vertex buffer. With enough patience and a long trial-and-error process, I managed to fix most of these issues. If you enable wireframe mode, you can see that the small cube has a different orientation for the left face - a great learning exercise nonetheless.
-
-## Normals
-
-Normals were fairly straightforward, however computing the correct normal relative to the camera view was tricky.
-
-I performed all lighting calculations in view space, with the intent of saving development time, but it did not, since I had to adjust the uniforms anyway. As a result, the normal-visualization mode always displays normals as if you are looking directly at them.
-
-The lighting looks good overall, but if you compare my engine side-by-side with the course-approved solution, you may notice slightly less "shininess" on the objects. I plan to investigate this further in my upcoming project, _RexCore_.
-
-# Helpful tutorials that I used
-
-- https://www.scratchapixel.com/lessons/geometry/bezier-curve-rendering-utah-teapot/curves-as-geometry.html
-- https://grokipedia.com/page/De_Casteljau's_algorithm
-- https://en.wikipedia.org/wiki/Phong_reflection_model
-- https://en.wikipedia.org/wiki/Schlick%27s_approximation
-- https://en.wikipedia.org/wiki/Fresnel_equations
-- https://learnopengl.com/Lighting/Basic-Lighting
+- [Bézier curves as geometry](https://www.scratchapixel.com/lessons/geometry/bezier-curve-rendering-utah-teapot/curves-as-geometry.html) — Scratchapixel
+- [De Casteljau's algorithm](https://en.wikipedia.org/wiki/De_Casteljau%27s_algorithm)
+- [Phong reflection model](https://en.wikipedia.org/wiki/Phong_reflection_model)
+- [Schlick's approximation](https://en.wikipedia.org/wiki/Schlick%27s_approximation)
+- [Fresnel equations](https://en.wikipedia.org/wiki/Fresnel_equations)
+- [Basic Lighting](https://learnopengl.com/Lighting/Basic-Lighting) — LearnOpenGL
